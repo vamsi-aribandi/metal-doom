@@ -1,0 +1,5 @@
+/build/
+*.wad
+*.WAD
+__pycache__/
+.DS_Store
