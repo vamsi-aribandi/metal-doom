@@ -20,6 +20,8 @@ brew install llvm lld wabt             # engine source translation tools
 
 Alternatively open `build/Metal Doom.app` and select your IWAD. The app bundles
 its engine program, so it can be moved away from the checkout. No WAD is bundled.
+First launch may spend tens of seconds compiling the engine;
+the loading window remains responsive.
 Doom shareware 1.9 is the tested IWAD (MD5
 `f0cefca49926d00903cf57551d901abe`). Doom/Ultimate Doom compatible IWADs use
 E1M1; Doom II/Freedoom Phase 2 is not the startup target of this milestone.
@@ -27,14 +29,14 @@ The loader does not download game assets.
 
 Controls: W/S or Up/Down move; A/D or Left/Right turn; Q/E strafe; Space fires;
 Enter uses doors/switches; Shift runs; 1–7 select weapons; Tab opens automap;
-Z is menu Enter; Escape closes the app. Closing the window also exits.
+M opens the menu; Z is menu Enter; Escape closes the app. Closing the window also exits.
 
 ## Validation
 
 ```sh
 ./test.sh --wad /absolute/path/to/doom1.wad
 ./run.sh --wad /absolute/path/to/doom1.wad --headless --scripted \
-  --ticks 350 --output build/benchmark
+  --ticks 35 --render-every-tick --output build/benchmark
 ```
 
 Headless output contains the original 320×200 framebuffer, per-tick diagnostics,

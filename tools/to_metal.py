@@ -85,16 +85,19 @@ void doom_initialize(device w2c_doom* s, uint offset, uint length) { w2c_doom_en
 void doom_tick(device w2c_doom* s) { w2c_doom_engine_tick_0(s); }
 void doom_render(device w2c_doom* s) { w2c_doom_engine_render_0(s); }
 kernel void doom_dispatch(device u8* memory [[buffer(0)]], device u32* c [[buffer(1)]], device w2c_doom* instance [[buffer(2)]]) {
- if(c[0]==5) { instance->w2c_memory.data=memory; instance->w2c_memory.size=100663296; instance->w2c_0x5F_stack_pointer=1048576; instance->trap=0; return; }
+ if(c[0]==5) { instance->w2c_memory.data=memory; instance->w2c_memory.size=100663296; instance->w2c_0x5F_stack_pointer=1048576; instance->trap=0; instance->w2c_memory.fault=0; return; }
  if(c[0]==0) c[8]=w2c_doom_engine_init_0(instance,c[1],c[2]);
  if(c[0]==1) doom_tick(instance);
  if(c[0]==2) doom_render(instance);
  if(c[0]==3) c[8]=w2c_doom_engine_alloc_0(instance,c[1]);
  if(c[0]==4) w2c_doom_engine_key_0(instance,c[1],c[2]);
  c[9]=w2c_doom_engine_framebuffer_0(instance); c[10]=w2c_doom_engine_diagnostics_0(instance);
- c[11]=w2c_doom_engine_log_0(instance); c[12]=w2c_doom_engine_log_size_0(instance); c[13]=instance->trap;
+ c[11]=w2c_doom_engine_log_0(instance); c[12]=w2c_doom_engine_log_size_0(instance); c[13]=instance->trap?instance->trap:instance->w2c_memory.fault;
 }
 '''
-(BUILD/'doom.metal').write_text(header+'\n'+'\n'.join(protos)+'\n'+'\n'.join(bodies)+bridge)
+output=header+'\n'+'\n'.join(protos)+'\n'+'\n'.join(bodies)+bridge
+assert not re.search(r'\bgoto\s+\w+', output), 'Unlowered branch'
+assert not re.search(r'\bdouble\s+\w+', output), 'Unlowered double'
+(BUILD/'doom.metal').write_text(output)
 (BUILD/'engine.json').write_text(json.dumps({'memoryBytes':len(image),'functions':len(funcs),'tableEntries':len(table),'width':320,'height':200},indent=2)+'\n')
 print(BUILD/'doom.metal')

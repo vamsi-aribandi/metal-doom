@@ -14,7 +14,7 @@ shared. The reference runs in fresh subprocesses because original Doom uses
 global state.
 
 The cases are initialization with zero additional ticks, 35 idle ticks, and
-350 scripted ticks. Each CPU case repeats from a fresh engine; the GPU scripted
+350 scripted ticks, plus 35 ticks drawing after every tick. Each CPU case repeats from a fresh engine; the GPU scripted
 case also repeats. Each GPU tick is compared across all 16 diagnostic fields,
 and each final 320 by 200 framebuffer is compared across every byte. The test
 also checks exactly one game tick per step, no tick advancement during drawing,
@@ -26,7 +26,8 @@ B, G, R, zero, matching the original DoomGeneric output.
 The scripted input matches `app/main.mm`: forward for ticks indexed 0–139,
 turn right 140–209, fire 210–279, use once at 280, then idle. Only key transitions
 are enqueued. As in headless GPU mode, the CPU draws at initialization and once
-after the final tick. Interactive mode may draw more frequently.
+after the final tick. The extra rendered case draws after every tick in both implementations.
+Interactive mode draws according to its presentation schedule.
 
 For Doom shareware 1.9 with SHA-256
 `1d7d43be501e67d927e415e0b8f3e29c3bf33075e859721816f652a526cac771`,

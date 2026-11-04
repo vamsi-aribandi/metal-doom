@@ -33,7 +33,7 @@ def main():
     golden_path = ROOT / 'tests/golden-shareware.json'
     golden = json.loads(golden_path.read_text()) if golden_path.exists() else {}
     results = []
-    cases = [('init', 0, False), ('idle', 35, False), ('scripted', 350, True)]
+    cases = [('init', 0, False), ('idle', 35, False), ('scripted', 350, True), ('rendered', 35, True)]
     for name, ticks, scripted in cases:
         reference = args.output / (name + '-cpu')
         repeat = args.output / (name + '-cpu-repeat')
@@ -41,10 +41,12 @@ def main():
             command = [sys.executable, ROOT / 'tests/reference.py', '--wad', args.wad, '--ticks', ticks, '--output', output]
             if scripted:
                 command.append('--scripted')
+            if name == 'rendered':
+                command.append('--render-every-tick')
             run(command)
         replay = compare(reference, repeat)
         summary = json.loads((reference / 'summary.json').read_text())
-        if golden.get('wad_sha256') == wad_sha:
+        if golden.get('wad_sha256') == wad_sha and name in golden.get('cases', {}):
             for field, value in golden['cases'][name].items():
                 if summary[field] != value:
                     raise AssertionError(f'{name}: original reference differs from known shareware golden {field}: {summary[field]!r} != {value!r}')
@@ -54,6 +56,8 @@ def main():
             command = [args.binary, '--wad', args.wad, '--headless', '--ticks', ticks, '--output', gpu]
             if scripted:
                 command.append('--scripted')
+            if name == 'rendered':
+                command.append('--render-every-tick')
             run(command)
             result['gpu_vs_original_c'] = compare(reference, gpu)
             if name == 'scripted':

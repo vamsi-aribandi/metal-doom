@@ -4,14 +4,20 @@ using namespace metal;
 typedef uchar u8; typedef char s8; typedef ushort u16; typedef short s16;
 typedef uint u32; typedef int s32; typedef ulong u64; typedef long s64;
 typedef float f32; typedef ulong f64; // IEEE754 bits, not an approximation of double.
-struct Memory { device u8* data; u64 size; };
+struct Memory { device u8* data; u64 size; u32 fault; };
 struct w2c_doom { u32 w2c_0x5F_stack_pointer; Memory w2c_memory; u32 trap; };
 inline u64 load_bits(device Memory* m,u64 a,uint n) {
- if(a>m->size || n>m->size-a) return 0;
+ if(a>m->size || n>m->size-a) {m->fault=3; return 0;}
+ if(n==4 && (a&3)==0)return *(device u32*)(m->data+a);
+ if(n==2 && (a&1)==0)return *(device u16*)(m->data+a);
+ if(n==8 && (a&7)==0)return *(device u64*)(m->data+a);
  u64 v=0; for(uint i=0;i<n;i++) v|=u64(m->data[a+i])<<(8*i); return v;
 }
 inline void store_bits(device Memory* m,u64 a,u64 v,uint n) {
- if(a>m->size || n>m->size-a) return;
+ if(a>m->size || n>m->size-a) {m->fault=3; return;}
+ if(n==4 && (a&3)==0){*(device u32*)(m->data+a)=u32(v);return;}
+ if(n==2 && (a&1)==0){*(device u16*)(m->data+a)=u16(v);return;}
+ if(n==8 && (a&7)==0){*(device u64*)(m->data+a)=v;return;}
  for(uint i=0;i<n;i++) m->data[a+i]=u8(v>>(8*i));
 }
 #define LOAD(name, ret, cast, n) inline ret name(device u8* b,u64 size,device Memory* m,u64 a) { return ret(cast(load_bits(m,a,n))); }
@@ -39,11 +45,11 @@ STORE(f64_store_default32,f64,8)
 inline f32 f32_load_default32(device u8* b,u64 size,device Memory* m,u64 a) { return as_type<float>(u32(load_bits(m,a,4))); }
 inline void f32_store_default32(device u8* b,u64 size,device Memory* m,u64 a,f32 v) { store_bits(m,a,as_type<uint>(v),4); }
 inline void memory_copy(device Memory* d,device Memory* s,u64 da,u64 sa,u64 n) {
- if(da>d->size || n>d->size-da || sa>s->size || n>s->size-sa) return;
+ if(da>d->size || n>d->size-da || sa>s->size || n>s->size-sa) {d->fault=3;return;}
  if(d->data+da>s->data+sa) { while(n) {--n; d->data[da+n]=s->data[sa+n];} }
  else for(u64 i=0;i<n;i++)d->data[da+i]=s->data[sa+i];
 }
-inline void memory_fill(device Memory* d,u64 a,u32 v,u64 n) {if(a>d->size||n>d->size-a)return;for(u64 i=0;i<n;i++)d->data[a+i]=u8(v);}
+inline void memory_fill(device Memory* d,u64 a,u32 v,u64 n) {if(a>d->size||n>d->size-a){d->fault=3;return;}for(u64 i=0;i<n;i++)d->data[a+i]=u8(v);}
 #define I32_DIV_S(x,y) ((y)?u32(s32(x)/s32(y)):0u)
 #define I64_DIV_S(x,y) ((y)?u64(s64(x)/s64(y)):0ul)
 #define I32_REM_S(x,y) ((y)?u32(s32(x)%s32(y)):0u)

@@ -42,7 +42,7 @@ Target inspected: vamsi-aribandi/metal-megakernel commit
    its work completed before publishing a frame. The engine uses no whole
    threadgroup barrier, so training and inference can remain independent.
 3. Configure linked visible functions and sufficient native call stack depth
-   on the combined pipeline. The standalone uses depth 128; measure actual
+   on the combined pipeline. The standalone uses depth 32; measure actual
    stack, register pressure, occupancy and watchdog behavior in the combined
    pipeline before choosing launch configuration.
 4. Add a frame ownership protocol/double buffer and input mailbox around the

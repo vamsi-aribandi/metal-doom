@@ -35,6 +35,7 @@ def main():
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--ticks', type=int, default=350)
     parser.add_argument('--scripted', action='store_true')
+    parser.add_argument('--render-every-tick', action='store_true')
     parser.add_argument('--library', type=Path, default=ROOT / 'build/libdoom_reference.dylib')
     args = parser.parse_args()
     if args.ticks < 0:
@@ -72,13 +73,16 @@ def main():
                 d.engine_key((keys >> bit) & 1, code)
         previous = keys
         d.engine_tick()
+        if args.render_every_tick:
+            d.engine_render()
         state = list(d.engine_diagnostics()[:16])
         if state[0] != index + 2 or state[15]:
             raise AssertionError(f'Invalid tick progression: tick={index + 1}, state={state}')
         rows.append([index + 1, state_hash(state), *state])
     # Match headless host: initialize with one draw, advance all ticks, then draw once.
     before_render = list(d.engine_diagnostics()[:16])
-    d.engine_render()
+    if not args.render_every_tick or not args.ticks:
+        d.engine_render()
     after_render = list(d.engine_diagnostics()[:16])
     if before_render[0] != after_render[0] or before_render[13] != after_render[13]:
         raise AssertionError('Rendering advanced game ticks')
