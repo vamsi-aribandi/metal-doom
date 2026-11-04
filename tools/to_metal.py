@@ -91,6 +91,10 @@ kernel void doom_dispatch(device u8* memory [[buffer(0)]], device u32* c [[buffe
  if(c[0]==2) doom_render(instance);
  if(c[0]==3) c[8]=w2c_doom_engine_alloc_0(instance,c[1]);
  if(c[0]==4) w2c_doom_engine_key_0(instance,c[1],c[2]);
+ // Profiling selectors isolate original engine phases without changing simulation.
+ if(c[0]==6) w2c_doom_I_FinishUpdate(instance);
+ if(c[0]==7) w2c_doom_engine_profile_world_0(instance);
+ if(c[0]==8) doom_render(instance);
  c[9]=w2c_doom_engine_framebuffer_0(instance); c[10]=w2c_doom_engine_diagnostics_0(instance);
  c[11]=w2c_doom_engine_log_0(instance); c[12]=w2c_doom_engine_log_size_0(instance); c[13]=instance->trap?instance->trap:instance->w2c_memory.fault;
 }
