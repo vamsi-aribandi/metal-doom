@@ -1,25 +1,25 @@
 {
   "passed": true,
-  "functions": 720,
-  "lowered_functions": 509,
-  "ticks": 125,
-  "source_sha256": "8aa76c3cd6a5b33e953f9a417935a5152e74255cd5b2edb996e65dca667fd696",
+  "functions": 725,
+  "lowered_functions": 507,
+  "ticks": 350,
+  "source_sha256": "e9e343aa50a4460e6f9cf5ee64fe3b605a73e52460ce734aa7e11e3ba9bf9ebc",
   "wad_sha256": "1d7d43be501e67d927e415e0b8f3e29c3bf33075e859721816f652a526cac771",
   "final_state": [
-    126,
+    351,
     0,
     100,
     0,
-    69202489,
-    -228153797,
+    69162692,
+    -189793744,
     0,
     1073741824,
     0,
     0,
     0,
-    126,
-    146,
-    126,
+    95,
+    156,
+    351,
     1,
     0
   ],
@@ -30,24 +30,24 @@
       "sha256": "7fc65d25045d2218905c3c05e62cac6698330db0d2e8780c3c7e5f53cb84fda6"
     },
     "ticks.bin": {
-      "bytes": 8064,
-      "sha256": "8663c327e2729fd0fa1cf47ec1299ed2cd074b6c18bd6612dd2295f0014e551d"
+      "bytes": 22464,
+      "sha256": "627e835dbd6f7c224b1b1da8bd27034608e8d35903fdf2dacbc21fd07d1b9c82"
     },
     "frame.rgba": {
       "bytes": 256000,
-      "sha256": "f11f81a2fa244bb024528649b90881e9ab4d47712e175e936cb16106ec8f8eef"
+      "sha256": "a89ef3f6afedd16fd9f2587690ccccfb22d065dc67ad0d7465ce8d1e46f04641"
     }
   },
   "timing": {
     "original": {
-      "compile_seconds": 4.4737877500000005,
-      "run_seconds": 0.26718295899999944,
-      "stdout": "final_state=126,0,100,0,69202489,-228153797,0,1073741824,0,0,0,126,146,126,1,0"
+      "compile_seconds": 4.569433666,
+      "run_seconds": 0.2636274579999993,
+      "stdout": "final_state=351,0,100,0,69162692,-189793744,0,1073741824,0,0,0,95,156,351,1,0"
     },
     "lowered": {
-      "compile_seconds": 5.295894833999999,
-      "run_seconds": 0.19254420900000113,
-      "stdout": "final_state=126,0,100,0,69202489,-228153797,0,1073741824,0,0,0,126,146,126,1,0"
+      "compile_seconds": 5.235654,
+      "run_seconds": 0.27064879200000114,
+      "stdout": "final_state=351,0,100,0,69162692,-189793744,0,1073741824,0,0,0,95,156,351,1,0"
     }
   }
 }

@@ -1,63 +1,77 @@
-# Metal Doom
+# metal-doom
 
-A native Apple Silicon Mac host for the actual Doom engine, with initialization,
-gameplay ticks and software rendering executed on the GPU through Metal.
-The standalone app is separate from the reusable engine. Starts in E1M1,
-skill 3, at 320×200; no sound. Game assets are supplied separately.
+The actual Doom engine running on an Apple Silicon GPU through Metal, with a
+native Mac app. Gameplay, the original software renderer, and palette conversion
+execute on the GPU. The CPU loads assets, collects keyboard input, and presents
+completed frames. Starts in E1M1, skill 3, at 320×200; sound can wait.
+
+On the tested M4 Mac mini, the 350-frame gameplay benchmark runs at **about
+55 FPS**, versus 7.7 FPS in the first correctness build. The window is paced to
+Doom's 35 Hz game clock; foreground testing measured roughly 32–35 FPS. All 351
+captured frames match the independent CPU reference. See
+[measurements and tests](docs/validation.md).
 
 ## Build and run
 
-Test machine: M4 Mac mini, 10 GPU cores, 16 GB, macOS 26.5.1. Apple's Command
-Line Tools are sufficient for the native app and runtime Metal compilation.
-A separate `metal` compiler or full Xcode installation is unnecessary.
+Requires Apple Silicon, macOS, Apple's Command Line Tools, Python 3, and the
+engine build tools below. Tested on M4, 16 GB, macOS 26.5.1. Full Xcode and the
+offline `metal` executable are unnecessary: the app compiles Metal at launch.
 
 ```sh
-xcode-select --install                 # if Command Line Tools are absent
-brew install llvm lld wabt             # engine source translation tools
+git clone https://github.com/vamsi-aribandi/metal-doom.git
+cd metal-doom
+brew install llvm lld wabt
 ./build.sh
 ./run.sh --wad /absolute/path/to/doom1.wad
 ```
 
-Alternatively open `build/Metal Doom.app` and select your IWAD. The app bundles
-its engine program, so it can be moved away from the checkout. No WAD is bundled.
-First launch may spend tens of seconds compiling the engine;
-the loading window remains responsive.
-Doom shareware 1.9 is the tested IWAD (MD5
-`f0cefca49926d00903cf57551d901abe`). Doom/Ultimate Doom compatible IWADs use
-E1M1; Doom II/Freedoom Phase 2 is not the startup target of this milestone.
-The loader does not download game assets.
+Install Command Line Tools with `xcode-select --install` if absent. Alternatively
+open `build/Metal Doom.app` and choose an IWAD. The app bundles its engine program
+and can be moved away from the checkout. First launch may spend tens of seconds
+compiling; the loading window remains responsive.
+
+**No game assets are bundled or downloaded.** Doom shareware 1.9 is the tested
+IWAD (MD5 `f0cefca49926d00903cf57551d901abe`). Doom/Ultimate Doom compatible IWADs
+use E1M1; Doom II and Freedoom Phase 2 are not this milestone's startup target.
 
 Controls: W/S or Up/Down move; A/D or Left/Right turn; Q/E strafe; Space fires;
-Enter uses doors/switches; Shift runs; 1–7 select weapons; Tab opens automap;
-M opens the menu; Z is menu Enter; Escape closes the app. Closing the window also exits.
+Enter uses doors/switches; Shift runs; 1–7 choose weapons; Tab opens automap;
+M opens the original menu; Z is menu Enter; Escape quits.
 
-## Validation
+## Test and profile
 
 ```sh
 ./test.sh --wad /absolute/path/to/doom1.wad
 ./run.sh --wad /absolute/path/to/doom1.wad --headless --scripted \
-  --ticks 35 --render-every-tick --output build/benchmark
+  --ticks 350 --render-every-tick --output build/benchmark
+./run.sh --wad /absolute/path/to/doom1.wad --profile --samples 12 \
+  --output build/profile
 ```
 
-Headless output contains the original 320×200 framebuffer, per-tick diagnostics,
-and measured Metal command execution time. `frame.rgba` retains Doom's native
-little-endian B,G,R,0 bytes despite the historical extension; it is not RGBA.
-Tests compare against an independent native ARM64 build of the original engine.
-See [validation](docs/validation.md) for measured results and limitations.
+Tests compare original ARM64 C against GPU state, every captured frame's SHA256,
+and every final framebuffer byte. Compiler restructuring also has independent
+randomized differential tests. Profiling isolates world rendering, palette
+conversion, and full-frame GPU time. [Methodology](docs/performance.md).
 
-## Design and scope
+## Reusable GPU engine
 
-The source translation goes C → freestanding wasm32 → typed C → native MSL.
-WebAssembly is an intermediate representation, not an interpreter at runtime.
-The GPU instance contains explicit linear memory and stack state. Callable
-`doom_initialize`, `doom_tick`, and `doom_render` functions have no CPU callbacks
-or dispatch dependencies. The small standalone kernel calls those functions;
-a future persistent kernel can call them directly.
+The source translation is C → freestanding wasm32 → typed C → native Metal.
+WebAssembly is an intermediate representation, not a runtime interpreter. Hot
+control flow becomes native loops and branches, with a conservative fallback.
+Doom's original indexed renderer runs on the owner lane; one SIMD group expands
+its exact palette in parallel inside the same render function and dispatch.
 
-See [architecture and integration work](docs/architecture.md),
-[engine ABI](engine/API.md), [credits](CREDITS.md), and [source provenance](vendor/PROVENANCE.md).
-The code is GPL-2.0-or-later with retained MIT third-party components.
-The first version prioritizes correctness: it uses one GPU lane and synchronous
-standalone dispatches. It makes no claim of GPU acceleration over a CPU port.
-Save/config persistence and audio are unavailable. The outer allocator is
-monotonic; full reset requires a new engine instance.
+`build/doom-engine.metal` contains the reusable device functions and explicit
+`DoomState`, without a kernel entrypoint. `app/dispatch.metal` supplies the
+standalone launch adapter. Initialization/rendering use only SIMD-group barriers;
+there are no CPU callbacks or mandatory separate engine launches.
+
+See [architecture and remaining megakernel work](docs/architecture.md),
+[engine ABI](engine/API.md), [credits](CREDITS.md), and
+[source provenance](vendor/PROVENANCE.md). Combined training/inference scheduling
+has not been tested. World rasterization is still serial, so there is more GPU
+performance work available. Audio and save/config persistence are unavailable;
+long sessions, full levels, and other maps need broader testing.
+
+GPL-2.0-or-later, with retained MIT third-party components. Proprietary WADs and
+game graphics are excluded from source control and app archives.

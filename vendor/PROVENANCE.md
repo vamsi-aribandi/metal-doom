@@ -17,3 +17,10 @@ then explicitly calls Doom's original input responders, command builder,
 `wipegamestate` before drawing. Sound output is disabled with normal engine flags.
 
 No game WAD assets are included. A user must supply their own compatible IWAD.
+
+The GPU build also renames the original platform `I_FinishUpdate` in its generated
+copy and appends `engine/video_exports.c`. The native Metal presentation helper
+expands the original indexed framebuffer and 256-entry gamma-adjusted palette
+cooperatively. The independent CPU reference retains the original conversion;
+all tested rendered frames match. No gameplay or indexed rasterization algorithm
+is replaced by this platform presentation adapter.

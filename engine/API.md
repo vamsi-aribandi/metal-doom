@@ -1,4 +1,8 @@
-# Engine ABI
+# Translated engine ABI
+
+For the public native Metal interface and its SIMD calling contract, see
+[architecture](../docs/architecture.md). These frontend exports are implementation
+details used by the native wrappers and CPU compiler tests.
 
 The exported engine functions operate on an explicit WASM instance: its linear
 memory contains all original Doom globals, heap, WAD data, input queue, and
@@ -8,14 +12,17 @@ All pointers below are 32-bit offsets into the instance's linear memory.
 - `engine_alloc(bytes) -> offset`: reserve space for an IWAD. Copy asset bytes to
   that offset before initialization.
 - `engine_init(wad_offset, wad_bytes) -> int`: initialize E1M1 at skill 3, load
-  the deferred level using one original game tick, and render the first frame.
+  the deferred level using one original game tick, and draw the first indexed frame. The native Metal wrapper then presents it.
   Returns 0 on success. A fresh instance is required to restart.
 - `engine_key(pressed, doom_key)`: enqueue a key transition; the original Doom
   input responders consume it at the next tick. Queue capacity is 128 events.
 - `engine_tick()`: process input, menu, original command building, and exactly
   one original `G_Ticker`; increments `gametic` once.
-- `engine_render()`: original software renderer and framebuffer conversion;
+- `engine_render()`: original indexed software renderer;
   no game tick. Time-based wipe transitions are skipped.
+- `engine_index_buffer() -> offset`, `engine_palette() -> offset`: GPU frontend
+  accessors used for cooperative native Metal presentation. The CPU reference
+  retains the original palette conversion.
 - `engine_framebuffer() -> offset`: 320 by 200 32-bit `0x00RRGGBB` pixels
   (little-endian bytes B, G, R, zero). Display as BGRA8 with alpha ignored.
 - `engine_diagnostics() -> offset`: 16 signed 32-bit integers, ordered:

@@ -36,8 +36,11 @@ def main():
     parser.add_argument('--ticks', type=int, default=350)
     parser.add_argument('--scripted', action='store_true')
     parser.add_argument('--render-every-tick', action='store_true')
+    parser.add_argument('--frame-hashes', action='store_true')
     parser.add_argument('--library', type=Path, default=ROOT / 'build/libdoom_reference.dylib')
     args = parser.parse_args()
+    if args.frame_hashes and not args.render_every_tick:
+        parser.error('--frame-hashes requires --render-every-tick')
     if args.ticks < 0:
         parser.error('--ticks must be nonnegative')
     d = ctypes.CDLL(str(args.library.resolve()))
@@ -64,6 +67,7 @@ def main():
         raise RuntimeError(f'Engine initialization failed: {result}: {d.engine_log().decode(errors="replace")}')
     initial = list(d.engine_diagnostics()[:16])
     rows = []
+    frame_hashes = [(0, sha256(ctypes.string_at(d.engine_framebuffer(), 320 * 200 * 4)))] if args.frame_hashes else []
     previous = 0
     for index in range(args.ticks):
         keys = input_mask(index, args.scripted)
@@ -75,6 +79,8 @@ def main():
         d.engine_tick()
         if args.render_every_tick:
             d.engine_render()
+            if args.frame_hashes:
+                frame_hashes.append((index + 1, sha256(ctypes.string_at(d.engine_framebuffer(), 320 * 200 * 4))))
         state = list(d.engine_diagnostics()[:16])
         if state[0] != index + 2 or state[15]:
             raise AssertionError(f'Invalid tick progression: tick={index + 1}, state={state}')
@@ -89,6 +95,14 @@ def main():
     frame = ctypes.string_at(d.engine_framebuffer(), 320 * 200 * 4)
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / 'frame.rgba').write_bytes(frame)
+    hash_path = args.output / 'frame-hashes.csv'
+    if args.frame_hashes:
+        with hash_path.open('w', newline='') as f:
+            writer = csv.writer(f, lineterminator='\n')
+            writer.writerow(['tick', 'digest'])
+            writer.writerows(frame_hashes)
+    elif hash_path.exists():
+        hash_path.unlink()
     with (args.output / 'ticks.csv').open('w', newline='') as f:
         writer = csv.writer(f, lineterminator='\n')
         writer.writerow(HEADER)

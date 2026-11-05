@@ -1,6 +1,8 @@
 // Native Metal host. Doom initialization, simulation and drawing execute on GPU.
 #import <Cocoa/Cocoa.h>
 #import <Metal/Metal.h>
+#import <QuartzCore/QuartzCore.h>
+#include <CommonCrypto/CommonDigest.h>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -12,6 +14,18 @@
 
 static constexpr uint32_t MemoryBytes = 64u * 1024u * 1024u;
 static constexpr uint32_t Width = 320, Height = 200;
+static std::string sha256(const uint8_t *bytes, size_t length) {
+  unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+  CC_SHA256(bytes, (CC_LONG)length, digest);
+  static constexpr char hex[] = "0123456789abcdef";
+  std::string result;
+  result.reserve(CC_SHA256_DIGEST_LENGTH * 2);
+  for (unsigned char byte : digest) {
+    result += hex[byte >> 4];
+    result += hex[byte & 15];
+  }
+  return result;
+}
 static std::string boundedError(NSError *error);
 static std::string readText(NSString *path) {
   NSError *error = nil;
@@ -83,6 +97,7 @@ public:
   uint32_t previousKeys = 0;
   double gpuMS = 0, tickGpuMS = 0, renderGpuMS = 0;
   unsigned dispatches = 0, renderCount = 0;
+  NSUInteger workers = 32;
   Engine(NSString *shader) {
     device = MTLCreateSystemDefaultDevice();
     if (!device)
@@ -117,6 +132,7 @@ public:
                                                        error:&error];
     if (!pipeline)
       throw std::runtime_error(boundedError(error));
+    workers = pipeline.threadExecutionWidth;
     mailbox = [device newBufferWithLength:256 options:MTLResourceStorageModeShared];
     instance = [device newBufferWithLength:1024 * 1024 options:MTLResourceStorageModeShared];
     memset(mailbox.contents, 0, 256);
@@ -136,7 +152,8 @@ public:
     [enc setBuffer:memory offset:0 atIndex:0];
     [enc setBuffer:mailbox offset:0 atIndex:1];
     [enc setBuffer:instance offset:0 atIndex:2];
-    [enc dispatchThreads:MTLSizeMake(1, 1, 1) threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
+    [enc dispatchThreads:MTLSizeMake(workers, 1, 1)
+        threadsPerThreadgroup:MTLSizeMake(workers, 1, 1)];
     [enc endEncoding];
     [cb commit];
     [cb waitUntilCompleted];
@@ -196,20 +213,54 @@ public:
     }
     return hash;
   }
-  const uint8_t *pixels() {
-    invoke(2);
+  const uint8_t *currentPixels() {
     if (uint64_t(control[9]) + Width * Height * 4 > memory.length)
       throw std::runtime_error("Invalid GPU framebuffer");
     return (uint8_t *)memory.contents + control[9];
+  }
+  const uint8_t *pixels() {
+    invoke(2);
+    return currentPixels();
   }
 };
 
 @interface DoomView : NSView
 @property(nonatomic) uint32_t keys;
 @property(nonatomic, strong) NSBitmapImageRep *bitmap;
+@property(nonatomic, strong) CALayer *imageLayer;
 @property(nonatomic, copy) NSString *loadingMessage;
 @end
 @implementation DoomView
+@synthesize bitmap = _bitmap;
+- (instancetype)initWithFrame:(NSRect)frame {
+  self = [super initWithFrame:frame];
+  if (self) {
+    self.wantsLayer = YES;
+    self.layer.backgroundColor = NSColor.blackColor.CGColor;
+    self.imageLayer = [CALayer layer];
+    self.imageLayer.magnificationFilter = kCAFilterNearest;
+    self.imageLayer.minificationFilter = kCAFilterNearest;
+    self.imageLayer.actions =
+        @{@"contents" : NSNull.null, @"bounds" : NSNull.null, @"position" : NSNull.null};
+    [self.layer addSublayer:self.imageLayer];
+  }
+  return self;
+}
+- (void)layout {
+  [super layout];
+  NSSize size = self.bounds.size;
+  CGFloat scale = MIN(size.width / 320.0, size.height / 240.0);
+  self.imageLayer.frame = CGRectMake((size.width - 320 * scale) / 2,
+                                     (size.height - 240 * scale) / 2, 320 * scale, 240 * scale);
+}
+- (void)setBitmap:(NSBitmapImageRep *)bitmap {
+  BOOL first = !_bitmap;
+  _bitmap = bitmap;
+  self.imageLayer.contents = bitmap ? (__bridge id)bitmap.CGImage : nil;
+  self.needsLayout = YES;
+  if (first)
+    [self setNeedsDisplay:YES];
+}
 - (BOOL)acceptsFirstResponder {
   return YES;
 }
@@ -226,15 +277,8 @@ public:
                                                  (self.bounds.size.height - size.height) / 2)
                       withAttributes:style];
   }
-  if (self.bitmap) {
-    [NSGraphicsContext currentContext].imageInterpolation = NSImageInterpolationNone;
-    NSSize size = self.bounds.size;
-    CGFloat scale = MIN(size.width / 320.0, size.height / 240.0);
-    NSRect rect = NSMakeRect((size.width - 320 * scale) / 2, (size.height - 240 * scale) / 2,
-                             320 * scale, 240 * scale);
-    [self.bitmap drawInRect:rect];
-  }
 }
+
 - (uint32_t)mask:(unsigned short)c {
   switch (c) {
   case 13:
@@ -304,7 +348,7 @@ public:
 @interface AppDelegate : NSObject <NSApplicationDelegate, NSWindowDelegate>
 @property(nonatomic, strong) NSWindow *window;
 @property(nonatomic, strong) DoomView *view;
-@property(nonatomic, strong) NSTimer *timer;
+@property(nonatomic, strong) dispatch_source_t frameTimer;
 @property(nonatomic) Engine *engine;
 @property(nonatomic, copy) NSString *shaderPath;
 @property(nonatomic, copy) NSString *initialPath;
@@ -315,7 +359,10 @@ public:
 @property(nonatomic) BOOL inFlight;
 @property(nonatomic) BOOL stopping;
 @property(nonatomic) double previousDisplay;
+@property(nonatomic) double firstDisplay;
 @property(nonatomic) unsigned frameSequence;
+@property(nonatomic) double lastTitleUpdate;
+@property(nonatomic) unsigned lastTitleFrame;
 @end
 @implementation AppDelegate
 - (void)applicationDidFinishLaunching:(NSNotification *)n {
@@ -336,7 +383,9 @@ public:
   [self.window center];
   [self.window makeKeyAndOrderFront:nil];
   [NSApp activateIgnoringOtherApps:YES];
-  self.worker = dispatch_queue_create("org.metaldoom.gpu", DISPATCH_QUEUE_SERIAL);
+  self.worker = dispatch_queue_create(
+      "org.metaldoom.gpu", dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL,
+                                                                   QOS_CLASS_USER_INTERACTIVE, 0));
   if (!self.wadData) {
     self.view.loadingMessage = @"Select your Doom IWAD to begin.";
     NSOpenPanel *panel = [NSOpenPanel openPanel];
@@ -383,11 +432,15 @@ public:
           self.wadData = nil;
           self.view.loadingMessage = nil;
           self.last = std::chrono::steady_clock::now();
-          self.timer = [NSTimer scheduledTimerWithTimeInterval:1.0 / 70.0
-                                                        target:self
-                                                      selector:@selector(update:)
-                                                      userInfo:nil
-                                                       repeats:YES];
+          // One deadline per simulation frame avoids polling gaps after GPU completion.
+          self.frameTimer = dispatch_source_create(
+              DISPATCH_SOURCE_TYPE_TIMER, 0, DISPATCH_TIMER_STRICT, dispatch_get_main_queue());
+          __weak AppDelegate *weakSelf = self;
+          dispatch_source_set_event_handler(self.frameTimer, ^{
+            [weakSelf update];
+          });
+          [self scheduleNextFrame];
+          dispatch_activate(self.frameTimer);
           fprintf(stderr, "GUI background GPU initialization complete\n");
         });
       } catch (const std::exception &e) {
@@ -405,7 +458,7 @@ public:
   if (self.stopping)
     return;
   self.stopping = YES;
-  [self.timer invalidate];
+  [self stopFrameTimer];
   fprintf(stderr, "Metal Doom: %s\n", message.UTF8String);
   self.view.loadingMessage = @"Doom could not start.";
   [self.view setNeedsDisplay:YES];
@@ -425,18 +478,37 @@ public:
 }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)application {
   self.stopping = YES;
-  [self.timer invalidate];
+  [self stopFrameTimer];
   return NSTerminateNow;
 }
-- (void)update:(NSTimer *)timer {
+- (void)stopFrameTimer {
+  if (self.frameTimer) {
+    dispatch_source_cancel(self.frameTimer);
+    self.frameTimer = nil;
+  }
+}
+- (void)scheduleNextFrame {
+  if (self.stopping || self.inFlight || !self.frameTimer)
+    return;
+  // Include the elapsed GPU/display work when choosing the next 35 Hz tick deadline.
+  double elapsed =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - self.last).count();
+  double delay = MAX(0.0, 1.0 / 35.0 - self.accumulator - elapsed);
+  dispatch_source_set_timer(self.frameTimer,
+                            dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
+                            DISPATCH_TIME_FOREVER, 100000);
+}
+- (void)update {
   auto now = std::chrono::steady_clock::now();
   self.accumulator += std::chrono::duration<double>(now - self.last).count();
   self.last = now;
   if (self.stopping || self.inFlight)
     return;
   unsigned count = MIN(8u, (unsigned)(self.accumulator * 35.0));
-  if (!count)
+  if (!count) {
+    [self scheduleNextFrame];
     return;
+  }
   self.accumulator -= count / 35.0;
   self.inFlight = YES;
   // Input and scheduling remain on the main thread. Only this serial queue
@@ -478,20 +550,34 @@ public:
             b.bitmapData[i * 4 + 3] = 255;
           }
           self.view.bitmap = b;
-          [self.view setNeedsDisplay:YES];
           double current =
               std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch())
                   .count();
           double fps = self.previousDisplay ? 1.0 / (current - self.previousDisplay) : 0;
           self.previousDisplay = current;
+          if (!self.frameSequence)
+            self.firstDisplay = current;
           ++self.frameSequence;
+          double averageFPS =
+              self.frameSequence > 1 ? (self.frameSequence - 1) / (current - self.firstDisplay) : 0;
           if (self.frameSequence == 1 || self.frameSequence % 35 == 0)
-            fprintf(stderr, "GUI frame=%u fps=%.2f keys=%u gametic=%d x=%d y=%d angle=%d\n",
-                    self.frameSequence, fps, keys, gametic, x, y, angle);
-          self.window.title =
-              [NSString stringWithFormat:
-                            @"Metal Doom · %.1f FPS · GPU %.1f ms/frame · %.2f ms/tick · Esc quit",
-                            fps, renderMS, ticksMS / count];
+            fprintf(stderr,
+                    "GUI frame=%u fps=%.2f average_fps=%.2f gpu_render_ms=%.3f keys=%u gametic=%d "
+                    "x=%d y=%d angle=%d\n",
+                    self.frameSequence, fps, averageFPS, renderMS, keys, gametic, x, y, angle);
+          // Updating the title every frame needlessly redraws AppKit chrome.
+          if (!self.lastTitleUpdate || current - self.lastTitleUpdate >= 0.5) {
+            double titleFPS = self.lastTitleUpdate ? (self.frameSequence - self.lastTitleFrame) /
+                                                         (current - self.lastTitleUpdate)
+                                                   : fps;
+            self.window.title = [NSString
+                stringWithFormat:
+                    @"Metal Doom · %.1f FPS · GPU %.1f ms/frame · %.2f ms/tick · Esc quit",
+                    titleFPS, renderMS, ticksMS / count];
+            self.lastTitleUpdate = current;
+            self.lastTitleFrame = self.frameSequence;
+          }
+          [self scheduleNextFrame];
         });
       } catch (const std::exception &e) {
         NSString *message = [NSString stringWithUTF8String:e.what()];
@@ -508,7 +594,8 @@ int main(int argc, char **argv) {
     try {
       NSString *shader = @"build/doom.metal", *wad = nil, *initial = @"build/initial-memory.bin",
                *output = @"build/results";
-      bool headless = false, scripted = false, renderEveryTick = false, profile = false;
+      bool headless = false, scripted = false, renderEveryTick = false, profile = false,
+           frameHashes = false;
       unsigned ticks = 350, samples = 12;
       for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
@@ -538,8 +625,11 @@ int main(int argc, char **argv) {
           scripted = true;
         else if (a == "--render-every-tick")
           renderEveryTick = true;
+        else if (a == "--frame-hashes")
+          frameHashes = true;
         else if (a == "--help") {
-          puts("metal-doom --wad FILE [--headless --ticks N --scripted --render-every-tick]\n"
+          puts("metal-doom --wad FILE [--headless --ticks N --scripted --render-every-tick "
+               "--frame-hashes]\n"
                "           [--profile --samples N] [--output DIR]\n"
                "           [--shader FILE --initial-memory FILE]\n"
                "--ticks: simulation ticks (default 350); --samples: samples per profile phase "
@@ -548,6 +638,8 @@ int main(int argc, char **argv) {
         } else
           throw std::runtime_error("Unknown option " + a);
       }
+      if (frameHashes && (!headless || profile || !renderEveryTick))
+        throw std::runtime_error("--frame-hashes requires --headless --render-every-tick");
       if (![[NSFileManager defaultManager] fileExistsAtPath:shader]) {
         NSString *candidate =
             [[NSBundle mainBundle].resourcePath stringByAppendingPathComponent:@"doom.metal"];
@@ -622,6 +714,14 @@ int main(int argc, char **argv) {
                                   withIntermediateDirectories:YES
                                                    attributes:nil
                                                         error:nil];
+        std::ostringstream frameTrace;
+        NSString *frameHashPath = [output stringByAppendingPathComponent:@"frame-hashes.csv"];
+        if (frameHashes) {
+          frameTrace << "tick,digest\n0," << sha256(engine.currentPixels(), Width * Height * 4)
+                     << "\n";
+        } else {
+          [[NSFileManager defaultManager] removeItemAtPath:frameHashPath error:nil];
+        }
         std::ostringstream trace;
         trace << "tick,hash,gametic,gamestate,health,armor,x,y,z,angle,kills,items,secrets,"
                  "rndindex,prndindex,leveltime,weapon,exited\n";
@@ -632,8 +732,11 @@ int main(int argc, char **argv) {
                                       (i >= 210 && i < 280 ? 64u : 0u) | (i == 280 ? 128u : 0u))
                                    : 0;
           engine.step(keys);
-          if (renderEveryTick)
+          if (renderEveryTick) {
             p = engine.pixels();
+            if (frameHashes)
+              frameTrace << i + 1 << "," << sha256(p, Width * Height * 4) << "\n";
+          }
           trace << i + 1 << "," << engine.stateHash();
           for (unsigned j = 0; j < 16; ++j)
             trace << "," << engine.diagnostics()[j];
@@ -644,6 +747,10 @@ int main(int argc, char **argv) {
         double seconds =
             std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
         writeBytes([output stringByAppendingPathComponent:@"frame.rgba"], p, Width * Height * 4);
+        if (frameHashes) {
+          std::string hashes = frameTrace.str();
+          writeBytes(frameHashPath, hashes.data(), hashes.size());
+        }
         std::string csv = trace.str();
         writeBytes([output stringByAppendingPathComponent:@"ticks.csv"], csv.data(), csv.size());
         NSString *summary = [NSString

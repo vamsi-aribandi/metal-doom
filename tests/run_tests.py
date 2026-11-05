@@ -33,7 +33,7 @@ def main():
     golden_path = ROOT / 'tests/golden-shareware.json'
     golden = json.loads(golden_path.read_text()) if golden_path.exists() else {}
     results = []
-    cases = [('init', 0, False), ('idle', 35, False), ('scripted', 350, True), ('rendered', 35, True)]
+    cases = [('init', 0, False), ('idle', 35, False), ('scripted', 350, True), ('rendered', 350, True)]
     for name, ticks, scripted in cases:
         reference = args.output / (name + '-cpu')
         repeat = args.output / (name + '-cpu-repeat')
@@ -42,7 +42,7 @@ def main():
             if scripted:
                 command.append('--scripted')
             if name == 'rendered':
-                command.append('--render-every-tick')
+                command.extend(['--render-every-tick', '--frame-hashes'])
             run(command)
         replay = compare(reference, repeat)
         summary = json.loads((reference / 'summary.json').read_text())
@@ -57,7 +57,7 @@ def main():
             if scripted:
                 command.append('--scripted')
             if name == 'rendered':
-                command.append('--render-every-tick')
+                command.extend(['--render-every-tick', '--frame-hashes'])
             run(command)
             result['gpu_vs_original_c'] = compare(reference, gpu)
             if name == 'scripted':

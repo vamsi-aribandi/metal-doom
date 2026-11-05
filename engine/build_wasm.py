@@ -16,7 +16,7 @@ SRC = BUILD / 'doom-src'
 LIB = ROOT / 'vendor/tinylibc'
 UPSTREAM = ROOT / 'vendor/doomgeneric/doomgeneric'
 FILES = '''dummy am_map doomdef doomstat dstrings d_event d_items d_iwad d_loop d_main d_mode d_net f_finale f_wipe g_game hu_lib hu_stuff info i_cdmus i_endoom i_joystick i_scale i_sound i_system i_timer memio m_argv m_bbox m_cheat m_config m_controls m_fixed m_menu m_misc m_random p_ceilng p_doors p_enemy p_floor p_inter p_lights p_map p_maputl p_mobj p_plats p_pspr p_saveg p_setup p_sight p_spec p_switch p_telept p_tick p_user r_bsp r_data r_draw r_main r_plane r_segs r_sky r_things sha1 sounds statdump st_lib st_stuff s_sound tables v_video wi_stuff w_checksum w_file w_main w_wad z_zone w_file_stdc i_input i_video doomgeneric'''.split()
-EXPORTS = 'engine_alloc engine_init engine_key engine_tick engine_render engine_profile_world engine_framebuffer engine_diagnostics engine_log engine_log_size'.split()
+EXPORTS = 'engine_alloc engine_init engine_key engine_tick engine_render engine_profile_world engine_index_buffer engine_palette engine_framebuffer engine_diagnostics engine_log engine_log_size'.split()
 BUILD.mkdir(exist_ok=True)
 shutil.copytree(UPSTREAM, SRC, dirs_exist_ok=True)
 p = SRC / 'd_main.c'
@@ -29,6 +29,11 @@ assert body.count('    doomgeneric_Tick();') == 1
 body = body.replace('    TryRunTics();', '    /* Adapter owns deterministic simulation ticks. */')
 body = body.replace('    doomgeneric_Tick();', '    /* Adapter owns rendering. */')
 p.write_text(s[:start] + body + s[end:])
+video = SRC / 'i_video.c'
+video_source = video.read_text()
+original_update = 'void I_FinishUpdate (void)'
+assert video_source.count(original_update) == 1
+video.write_text(video_source.replace(original_update, 'void I_FinishUpdate_Reference (void)') + '\n' + (ROOT / 'engine/video_exports.c').read_text())
 clang = os.environ.get('CLANG', ('/opt/homebrew/opt/llvm/bin/clang' if Path('/opt/homebrew/opt/llvm/bin/clang').exists() else shutil.which('clang') or 'clang'))
 ld = os.environ.get('WASM_LD', shutil.which('wasm-ld') or '/opt/homebrew/opt/lld/bin/wasm-ld')
 resource = subprocess.check_output([clang, '-print-resource-dir'], text=True).strip()

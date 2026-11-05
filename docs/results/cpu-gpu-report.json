@@ -7,6 +7,7 @@
       "case": "init",
       "cpu_deterministic_replay": {
         "passed": true,
+        "frame_hashes_compared": 0,
         "ticks_compared": 0,
         "diagnostic_values_compared": 0,
         "frame_bytes_compared": 256000,
@@ -15,6 +16,7 @@
       },
       "gpu_vs_original_c": {
         "passed": true,
+        "frame_hashes_compared": 0,
         "ticks_compared": 0,
         "diagnostic_values_compared": 0,
         "frame_bytes_compared": 256000,
@@ -26,6 +28,7 @@
       "case": "idle",
       "cpu_deterministic_replay": {
         "passed": true,
+        "frame_hashes_compared": 0,
         "ticks_compared": 35,
         "diagnostic_values_compared": 560,
         "frame_bytes_compared": 256000,
@@ -34,6 +37,7 @@
       },
       "gpu_vs_original_c": {
         "passed": true,
+        "frame_hashes_compared": 0,
         "ticks_compared": 35,
         "diagnostic_values_compared": 560,
         "frame_bytes_compared": 256000,
@@ -45,6 +49,7 @@
       "case": "scripted",
       "cpu_deterministic_replay": {
         "passed": true,
+        "frame_hashes_compared": 0,
         "ticks_compared": 350,
         "diagnostic_values_compared": 5600,
         "frame_bytes_compared": 256000,
@@ -53,6 +58,7 @@
       },
       "gpu_vs_original_c": {
         "passed": true,
+        "frame_hashes_compared": 0,
         "ticks_compared": 350,
         "diagnostic_values_compared": 5600,
         "frame_bytes_compared": 256000,
@@ -61,6 +67,7 @@
       },
       "gpu_deterministic_replay": {
         "passed": true,
+        "frame_hashes_compared": 0,
         "ticks_compared": 350,
         "diagnostic_values_compared": 5600,
         "frame_bytes_compared": 256000,
@@ -72,19 +79,21 @@
       "case": "rendered",
       "cpu_deterministic_replay": {
         "passed": true,
-        "ticks_compared": 35,
-        "diagnostic_values_compared": 560,
+        "frame_hashes_compared": 351,
+        "ticks_compared": 350,
+        "diagnostic_values_compared": 5600,
         "frame_bytes_compared": 256000,
-        "frame_sha256": "1820115a19dfeb0ae240d594a3159d5904335b6e46a196f4dd0b8a16012f37f7",
-        "final_state_hash": 2695997885
+        "frame_sha256": "aadefb30246a9c756eb1d59456099c8ffe1e700c4552f72287395e402c755c85",
+        "final_state_hash": 2092533111
       },
       "gpu_vs_original_c": {
         "passed": true,
-        "ticks_compared": 35,
-        "diagnostic_values_compared": 560,
+        "frame_hashes_compared": 351,
+        "ticks_compared": 350,
+        "diagnostic_values_compared": 5600,
         "frame_bytes_compared": 256000,
-        "frame_sha256": "1820115a19dfeb0ae240d594a3159d5904335b6e46a196f4dd0b8a16012f37f7",
-        "final_state_hash": 2695997885
+        "frame_sha256": "aadefb30246a9c756eb1d59456099c8ffe1e700c4552f72287395e402c755c85",
+        "final_state_hash": 2092533111
       }
     }
   ]

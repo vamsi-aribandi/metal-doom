@@ -14,9 +14,11 @@ shared. The reference runs in fresh subprocesses because original Doom uses
 global state.
 
 The cases are initialization with zero additional ticks, 35 idle ticks, and
-350 scripted ticks, plus 35 ticks drawing after every tick. Each CPU case repeats from a fresh engine; the GPU scripted
+350 scripted ticks, plus 350 ticks drawing after every tick. Each CPU case repeats from a fresh engine; the GPU scripted
 case also repeats. Each GPU tick is compared across all 16 diagnostic fields,
-and each final 320 by 200 framebuffer is compared across every byte. The test
+and each final 320 by 200 framebuffer is compared across every byte. The rendered
+case also compares SHA256 for the initial frame and every tick: 351 complete
+frame hashes, captured without additional renders. The test
 also checks exactly one game tick per step, no tick advancement during drawing,
 CSV hashes, and engine exit flags. Failure identifies the first differing field
 or framebuffer pixel. `build/tests/report.json` records results and SHA-256
@@ -55,3 +57,11 @@ share the same original game code and platform adapter; these tests are not a
 proof of full compatibility with every WAD, savegame, demo, or exceptional path.
 Sound and save/config writes are disabled. The first test of a Metal source may
 spend time compiling the library before executing.
+
+The native Metal palette conversion uses the original engine's indexed pixels
+and gamma-adjusted palette across one SIMD group. The CPU reference deliberately
+retains the original C conversion, so frame comparisons cover that optimization.
+`tests/test_structured_cfg.py` separately compares generated structured loops and
+branches with independently compiled ordinary C, including randomized inputs and
+side effects. `tests/test_lowering.py` checks the complete translated engine on
+CPU; its presentation adapter reconstructs RGB for its CFG-only comparisons.

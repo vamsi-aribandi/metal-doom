@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from structured_cfg import try_structure
 
 
 class LoweringError(ValueError):
@@ -315,7 +316,7 @@ def lower_body(body: str) -> str:
     """
     if not re.search(r"\bgoto\s+\w+\s*;", body):
         return body
-    if "__doom_cfg_pc" in body:
+    if "__doom_cfg_pc" in body or "__doom_struct_" in body:
         raise LoweringError("Reserved CFG program counter name already in use")
     seq = Parser(body).sequence()
     declarations, remaining = [], []
@@ -336,6 +337,9 @@ def lower_body(body: str) -> str:
     entry = cfg.sequence(remaining, end)
     cfg.resolve()
     entry, reachable = cfg.optimize(entry)
+    structured = try_structure(cfg, entry)
+    if structured is not None:
+        return "\n".join("  " + text for text in declarations) + "\n" + structured
     # Stable small IDs make the emitted source readable and reduce switch range.
     order = [entry] + sorted(reachable - {entry})
     ids = {old: new for new, old in enumerate(order)}
@@ -345,8 +349,23 @@ def lower_body(body: str) -> str:
     for old in order:
         block = cfg.blocks[old]
         out.append(f"      case {ids[old]}: {{")
-        out.extend("        " + line for line in block.lines)
         t = block.term
+        # A block whose conditional back edge targets itself is already a
+        # complete natural loop. Keep that loop inside one dispatch case so
+        # Metal sees its induction variables and pixel loads directly, rather
+        # than routing every iteration through the outer program-counter switch.
+        # Other blocks may still jump here: entering this do/while always runs
+        # the body once, exactly as entering the original basic block does.
+        self_loop = t[0] == "branch" and old in t[2:] and t[2] != t[3]
+        if self_loop:
+            condition = t[1] if t[2] == old else "!(" + t[1] + ")"
+            exit_target = t[3] if t[2] == old else t[2]
+            out.append("        do {")
+            out.extend("          " + line for line in block.lines)
+            out.append("        } while (" + condition + ");")
+            t = ("jump", exit_target)
+        else:
+            out.extend("        " + line for line in block.lines)
         if t[0] == "jump":
             out.append(f"        {pc} = {ids[t[1]]};")
         elif t[0] == "branch":
@@ -386,6 +405,19 @@ def _selftest():
         "int x = 0; while (n--) { switch(n % 3) { case 0: continue; "
         "case 1: ++x; break; default: goto out; } x += 3; } out:; return x;",
     ]
+    # Both back-edge polarities must evaluate side-effecting conditions exactly
+    # once per iteration. The third case leaves and re-enters the same loop,
+    # checking that folding it does not change its entry or its exit state.
+    single_block_loops = [
+        "int x = 0; loop:; x += n; if (n-- > 0) goto loop; return x + n;",
+        "int x = 0; loop:; x += n; if (n-- <= 0) goto out; goto loop; out:; return x + n;",
+        "int x = 0; int rounds = 0; loop:; x += n; if (n-- > 0) goto loop; "
+        "if (++rounds < 3) { n = rounds; goto loop; } return x + n;",
+    ]
+    for body in single_block_loops:
+        lowered = lower_body(body)
+        assert "__doom_cfg_pc" not in lowered or "do {" in lowered, "Single-block loop was left in the PC dispatcher"
+    bodies += single_block_loops
     source = ["#include <stdio.h>"]
     for i, body in enumerate(bodies):
         lowered = lower_body(body)

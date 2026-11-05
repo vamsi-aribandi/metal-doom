@@ -25,6 +25,19 @@ def load_trace(directory):
             raise AssertionError(f'{directory}: engine exited at tick {index + 1}')
     return rows
 
+def load_frame_hashes(directory, ticks):
+    with (directory / 'frame-hashes.csv').open(newline='') as f:
+        reader = csv.reader(f)
+        if next(reader) != ['tick', 'digest']:
+            raise AssertionError(f'{directory}: unexpected frame hash CSV header')
+        rows = [(int(tick), digest) for tick, digest in reader]
+    if len(rows) != ticks + 1:
+        raise AssertionError(f'{directory}: expected {ticks + 1} frame hashes, found {len(rows)}')
+    for index, (tick, digest) in enumerate(rows):
+        if tick != index or len(digest) != 64 or any(c not in '0123456789abcdef' for c in digest):
+            raise AssertionError(f'{directory}: invalid frame hash at row {index}: {(tick, digest)!r}')
+    return rows
+
 def compare(reference_dir, actual_dir):
     expected = load_trace(reference_dir)
     actual = load_trace(actual_dir)
@@ -48,7 +61,15 @@ def compare(reference_dir, actual_dir):
     for key in ('ticks', 'width', 'height', 'state_hash'):
         if expected_summary[key] != actual_summary[key]:
             raise AssertionError(f'Summary {key} differs: {expected_summary[key]} vs {actual_summary[key]}')
-    report = {'passed': True, 'ticks_compared': len(actual), 'diagnostic_values_compared': len(actual) * 16,
+    frame_hashes_compared = 0
+    if all((directory / 'frame-hashes.csv').exists() for directory in (reference_dir, actual_dir)):
+        expected_hashes = load_frame_hashes(reference_dir, len(expected))
+        actual_hashes = load_frame_hashes(actual_dir, len(actual))
+        for (tick, want), (_, got) in zip(expected_hashes, actual_hashes):
+            if want != got:
+                raise AssertionError(f'First framebuffer hash divergence at tick {tick}: expected={want}, actual={got}')
+        frame_hashes_compared = len(actual_hashes)
+    report = {'passed': True, 'frame_hashes_compared': frame_hashes_compared, 'ticks_compared': len(actual), 'diagnostic_values_compared': len(actual) * 16,
               'frame_bytes_compared': len(got_frame), 'frame_sha256': hashlib.sha256(got_frame).hexdigest(),
               'final_state_hash': actual_summary['state_hash']}
     return report
