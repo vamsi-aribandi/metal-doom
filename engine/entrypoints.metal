@@ -51,10 +51,82 @@ uint doom_initialize(device DoomState *s, uint offset, uint length, uint lane, u
   return result;
 }
 void doom_tick(device DoomState *s) { w2c_doom_engine_tick_0(s); }
-void doom_render(device DoomState *s, uint lane, uint lanes) {
-  if (lane == 0)
-    w2c_doom_engine_render_0(s);
+// Queue layout mirrors engine/parallel_draw.c (wasm32 offsets, 28-byte records).
+struct DoomDrawCommand { uint dest, source, colors, position, step, count; int next; };
+struct DoomDrawQueue {
+  uint columns, spans;
+  int head[320], tail[320];
+  DoomDrawCommand column[4096], span[4096];
+};
+void doom_draw_command(device DoomState *s, const device DoomDrawCommand &c, bool span) {
+  device u8 *base = s->w2c_memory.data;
+  ulong size = s->w2c_memory.size;
+  uint stride = span ? 1 : DoomWidth;
+  if (c.count >= DoomWidth * DoomHeight || ulong(c.dest) + ulong(c.count) * stride >= size ||
+      ulong(c.source) + (span ? 4096 : 128) > size || ulong(c.colors) + 256 > size) {
+    atomic_store_explicit((device atomic_uint *)&s->w2c_memory.fault, 3u, memory_order_relaxed);
+    return;
+  }
+  uint position = c.position;
+  device u8 *dest = base + c.dest;
+  const device u8 *source = base + c.source, *colors = base + c.colors;
+  for (uint i = 0; i <= c.count; ++i) {
+    uint spot = span ? ((position >> 4) & 0xfc0) | (position >> 26)
+                     : uint(int(position) >> 16) & 127;
+    *dest = colors[source[spot]];
+    dest += stride;
+    position += c.step;
+  }
+}
+void doom_draw_opaque(device DoomState *s, uint lane, uint lanes) {
+  uint offset = w2c_doom_engine_draw_queue(s);
+  if ((offset & 3) || ulong(offset) + sizeof(DoomDrawQueue) > s->w2c_memory.size) {
+    if (lane == 0) s->trap = 3;
+    return;
+  }
+  const device DoomDrawQueue &q = *(const device DoomDrawQueue *)(s->w2c_memory.data + offset);
+  if (q.columns > 4096 || q.spans > 4096) {
+    if (lane == 0) s->trap = 3;
+    return;
+  }
+  // Each screen column has one owner, preserving every overwrite in draw order.
+  for (uint x = lane; x < DoomWidth; x += lanes) {
+    int index = q.head[x];
+    for (uint visited = 0; index >= 0; ++visited) {
+      if (uint(index) >= q.columns || visited >= q.columns) {
+        atomic_store_explicit((device atomic_uint *)&s->w2c_memory.fault, 3u, memory_order_relaxed);
+        break;
+      }
+      const device DoomDrawCommand &c = q.column[index];
+      doom_draw_command(s, c, false);
+      index = c.next;
+    }
+  }
   simdgroup_barrier(mem_flags::mem_device);
-  if (!s->trap && !s->w2c_memory.fault)
-    doom_present(s, lane, lanes);
+  // Original opaque floor/ceiling spans do not overlap one another.
+  for (uint i = lane; i < q.spans; i += lanes)
+    doom_draw_command(s, q.span[i], true);
+  simdgroup_barrier(mem_flags::mem_device);
+}
+void doom_render_serial(device DoomState *s, uint lane, uint lanes) {
+  if (lane == 0) w2c_doom_engine_render_0(s);
+  simdgroup_barrier(mem_flags::mem_device);
+  if (!s->trap && !s->w2c_memory.fault) doom_present(s, lane, lanes);
+}
+void doom_render(device DoomState *s, uint lane, uint lanes) {
+  if (lane == 0) w2c_doom_engine_render_begin(s);
+  simdgroup_barrier(mem_flags::mem_device);
+  if (s->trap || s->w2c_memory.fault) return;
+  doom_draw_opaque(s, lane, lanes);
+  if (lane == 0) w2c_doom_engine_render_end(s);
+  simdgroup_barrier(mem_flags::mem_device);
+  if (!s->trap && !s->w2c_memory.fault) doom_present(s, lane, lanes);
+}
+void doom_profile_world(device DoomState *s, uint lane, uint lanes) {
+  if (lane == 0) w2c_doom_engine_world_begin(s);
+  simdgroup_barrier(mem_flags::mem_device);
+  if (s->trap || s->w2c_memory.fault) return;
+  doom_draw_opaque(s, lane, lanes);
+  if (lane == 0) w2c_doom_engine_world_end(s);
+  simdgroup_barrier(mem_flags::mem_device);
 }

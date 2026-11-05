@@ -595,7 +595,7 @@ int main(int argc, char **argv) {
       NSString *shader = @"build/doom.metal", *wad = nil, *initial = @"build/initial-memory.bin",
                *output = @"build/results";
       bool headless = false, scripted = false, renderEveryTick = false, profile = false,
-           frameHashes = false;
+           frameHashes = false, serialRender = false;
       unsigned ticks = 350, samples = 12;
       for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
@@ -625,12 +625,14 @@ int main(int argc, char **argv) {
           scripted = true;
         else if (a == "--render-every-tick")
           renderEveryTick = true;
+        else if (a == "--serial-render")
+          serialRender = true;
         else if (a == "--frame-hashes")
           frameHashes = true;
         else if (a == "--help") {
           puts("metal-doom --wad FILE [--headless --ticks N --scripted --render-every-tick "
                "--frame-hashes]\n"
-               "           [--profile --samples N] [--output DIR]\n"
+               "           [--profile --samples N] [--serial-render] [--output DIR]\n"
                "           [--shader FILE --initial-memory FILE]\n"
                "--ticks: simulation ticks (default 350); --samples: samples per profile phase "
                "(default 12)");
@@ -638,6 +640,8 @@ int main(int argc, char **argv) {
         } else
           throw std::runtime_error("Unknown option " + a);
       }
+      if (serialRender && !headless)
+        throw std::runtime_error("--serial-render requires --headless or --profile");
       if (frameHashes && (!headless || profile || !renderEveryTick))
         throw std::runtime_error("--frame-hashes requires --headless --render-every-tick");
       if (![[NSFileManager defaultManager] fileExistsAtPath:shader]) {
@@ -660,6 +664,7 @@ int main(int argc, char **argv) {
       NSData *wadData = wad ? readWad(wad) : nil;
       if (profile) {
         Engine engine(shader);
+        engine.control[14] = serialRender;
         engine.load(wadData, initial);
         // Profile repeated rendering of the same initialized game state; no simulation runs here.
         // Each measured command is isolated, and GPU timestamps exclude host-side waiting.
@@ -697,6 +702,7 @@ int main(int argc, char **argv) {
         NSDictionary *result =
             @{@"device" : engine.device.name,
               @"samples" : @(samples),
+              @"serial_render" : @(serialRender),
               @"phases" : phases};
         NSData *json = [NSJSONSerialization dataWithJSONObject:result
                                                        options:NSJSONWritingPrettyPrinted
@@ -709,6 +715,7 @@ int main(int argc, char **argv) {
       }
       if (headless) {
         Engine engine(shader);
+        engine.control[14] = serialRender;
         engine.load(wadData, initial);
         [[NSFileManager defaultManager] createDirectoryAtPath:output
                                   withIntermediateDirectories:YES
@@ -757,11 +764,11 @@ int main(int argc, char **argv) {
             stringWithFormat:
                 @"{\"device\":\"%@\",\"ticks\":%u,\"seconds\":%.9f,\"gpu_ms\":%.6f,\"dispatches\":%"
                 @"u,\"state_hash\":%u,\"width\":%u,\"height\":%u,\"tick_gpu_ms\":%.6f,\"render_gpu_"
-                @"ms\":%.6f,\"frames\":%u,\"wall_fps\":%.6f,\"render_every_tick\":%@}\n",
+                @"ms\":%.6f,\"frames\":%u,\"wall_fps\":%.6f,\"render_every_tick\":%@,\"serial_render\":%@}\n",
                 engine.device.name, ticks, seconds, engine.gpuMS, engine.dispatches,
                 engine.stateHash(), Width, Height, engine.tickGpuMS, engine.renderGpuMS,
                 engine.renderCount, engine.renderCount / seconds,
-                renderEveryTick ? @"true" : @"false"];
+                renderEveryTick ? @"true" : @"false", serialRender ? @"true" : @"false"];
         writeBytes([output stringByAppendingPathComponent:@"summary.json"], summary.UTF8String,
                    strlen(summary.UTF8String));
         printf("%s", summary.UTF8String);

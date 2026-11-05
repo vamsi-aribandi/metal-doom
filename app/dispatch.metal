@@ -15,16 +15,21 @@ kernel void doom_dispatch(device u8 *memory [[buffer(0)]], device u32 *c [[buffe
   }
   if (op == 1 && lane == 0)
     doom_tick(instance);
-  if (op == 2 || op == 8)
-    doom_render(instance, lane, lanes);
+  if (op == 2 || op == 8) {
+    if (c[14]) doom_render_serial(instance, lane, lanes);
+    else doom_render(instance, lane, lanes);
+  }
   if (op == 3 && lane == 0)
     c[8] = doom_allocate(instance, c[1]);
   if (op == 4 && lane == 0)
     doom_key(instance, c[1], c[2]);
   if (op == 6)
     doom_present(instance, lane, lanes);
-  if (op == 7 && lane == 0)
-    w2c_doom_engine_profile_world_0(instance);
+  if (op == 7) {
+    if (c[14]) {
+      if (lane == 0) w2c_doom_engine_profile_world_0(instance);
+    } else doom_profile_world(instance, lane, lanes);
+  }
   if (lane == 0) {
     c[9] = doom_framebuffer_offset(instance);
     c[10] = doom_diagnostics_offset(instance);

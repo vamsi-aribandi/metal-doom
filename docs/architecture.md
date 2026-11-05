@@ -13,6 +13,21 @@ Unsupported graphs retain the general program-counter fallback in
 `tools/lower_cfg.py`. Independent differential tests cover both paths. This
 keeps hot pixel loops out of the old per-basic-block switch dispatcher.
 
+`engine/parallel_draw.py` patches generated GPU build copies at the existing
+opaque column/span calls and at the display/opaque/masked boundaries. The owner
+runs scene traversal and queues exact fixed-point drawing parameters; 32 lanes
+consume the queue inside the same render call. Every screen column has one owner,
+preserving overwrite order. Original visplane spans do not overlap. Two
+SIMD-group barriers separate columns, spans, and the original serial masked
+textures/sprites/fuzz/UI. Low-detail drawing remains serial.
+
+`engine/parallel_draw.c` stores a fixed 231,944-byte queue in instance memory.
+Overflow flushes pending commands serially and resumes queuing. The same flush
+runs before the zone allocator purges a cached source texture/flat, so deferred
+commands never retain reclaimed data. No cache pinning or gameplay changes are
+needed. `doom_render_serial` retains the original indexed path for comparison.
+Initialization currently draws its first frame serially.
+
 Doom still produces its original indexed framebuffer and gamma-adjusted palette.
 `engine/video_exports.c` replaces only the final platform palette-expansion loop
 in generated build copies. `engine/entrypoints.metal` expands those exact colors
@@ -82,8 +97,10 @@ Inspected target: `vamsi-aribandi/metal-megakernel` commit `74b72a9`, one
 4. Add input/frame ownership and double buffering around this API. Standalone
    command completion does not establish a live CPU/persistent-GPU mailbox.
    The target's experimental `coherent(system)` mechanism remains separate.
-5. Measure tick/render latency alongside real ML work. World rasterization is
-   still sequential on the GPU; parallel columns/spans are potential next work.
+5. Measure tick/render latency alongside real ML work. Opaque columns/spans
+   already share the game SIMD group; scene traversal,
+   masked drawing and low detail remain sequential. Optimize further only if
+   coexistence measurements require it.
 6. Extend gameplay coverage to full levels, death/restart, other maps, unusual
    BSP depth, and long sessions. The outer allocator is monotonic; a fresh
    instance resets it, while Doom's zone allocator reuses internal allocations.

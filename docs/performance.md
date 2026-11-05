@@ -13,7 +13,7 @@ repeated rendering of that initialized scene without advancing simulation ticks.
 
 `profile.json` records the device, sample count, and mean/minimum/maximum GPU milliseconds
 for cooperative native palette expansion (`doom_present`), world rendering
-(`R_RenderPlayerView`), and full engine rendering (`D_Display` through `engine_render`).
+(`R_RenderPlayerView`, with cooperative opaque drawing), and full engine rendering (staged `D_Display` through `doom_render`).
 Each phase uses one command buffer. World rendering executes the original engine;
 palette expansion uses its unchanged indexed pixels and gamma-adjusted palette. GPU command
 timestamps exclude CPU encoding and waiting; mean wall time includes those costs. Shader
@@ -41,7 +41,9 @@ through a large program-counter switch. These costs were measured separately.
 
 The current path uses the cached view, reconstructs proven reducible regions as
 native loops/branches, and expands palette pixels across one SIMD group. The
-world renderer remains original GPU Doom code. Palette expansion shares the
+world renderer preserves original scene traversal, sampling and draw order.
+Opaque high-detail columns/spans now draw across the 32 game lanes; masked
+textures/sprites/fuzz/UI and low detail remain serial. Palette expansion shares the
 render dispatch and uses no whole-threadgroup barrier. The native window uses
 precise one-shot pacing and a layer-backed image rather than repainting a scaled
 bitmap and title bar every frame.
@@ -51,3 +53,13 @@ reports. Headless FPS is uncapped throughput; GUI FPS is paced toward 35 Hz and
 should be measured in the foreground. macOS may throttle an inactive window.
 `--frame-hashes` adds validation work and is intentionally omitted from benchmark
 commands; the test runner enables it for the 350-frame reference comparison.
+
+## Compare serial and cooperative drawing
+
+Add `--serial-render` to the same headless benchmark or profiler command to use
+the original serial indexed renderer in the **same binary and shader**. Palette
+expansion remains cooperative in both modes. Reports record `serial_render`.
+The flag is diagnostic and requires headless/profile mode. Run variants
+sequentially on an otherwise idle GPU; do not compare a frame-hash run with a
+throughput run. The renderer keeps one dispatch per frame and uses only the
+32-lane game SIMD group; it does not occupy every GPU core.

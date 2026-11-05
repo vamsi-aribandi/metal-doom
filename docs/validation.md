@@ -32,9 +32,21 @@ After 350 scripted ticks it was
 `aadefb30246a9c756eb1d59456099c8ffe1e700c4552f72287395e402c755c85`.
 Raw results: [CPU/GPU report](results/cpu-gpu-report.json).
 
+The independent CPU reference retains original serial indexed drawing and palette
+conversion; it does not use the new queue or staged display hooks. A second
+420-tick schedule compares **421 complete frame hashes and 6,736 diagnostic
+values**, exercising low/high detail, reduced/restored/full viewport, automap,
+menus, pause/resume, gamma, movement, turning and fire input.
+[Renderer-state report](results/renderer-states.json).
+
+An isolated build with a 16-command flush threshold forces overflow fallback;
+36 frames, every tick diagnostic, and all final frame bytes match original C.
+[Fallback report](results/queue-fallback.json). This test builds in a temporary
+checkout without replacing the normal shader or app.
+
 `python3 tests/test_lowering.py --wad /external/path/doom1.wad` separately
 compared the original wasm2c output with the structured-control-flow version:
-725 function bodies, 507 requiring lowering, 350 ticks, identical initial frame,
+740 function bodies, 516 requiring lowering, 350 ticks, identical initial frame,
 full diagnostic trace, and final frame. [Report](results/cfg-report.json).
 The restructuring suite also passes 13 fixed regressions and 78,660 independent
 randomized/void differential executions under clang O0, O2, and UBSan. Unsupported
@@ -46,7 +58,7 @@ app bundle contain no WADs or game graphics. The unused upstream raster icon
 was omitted.
 
 Native UI tested through keyboard input: Up moved the player, Right turned,
-Space fired and reduced ammo from 50 to 48, M opened/closed the original Doom menu, and Escape stopped the app.
+Space fired and reduced ammo from 50 to 49, M opened/closed the original Doom menu, and Escape stopped the app.
 The final packaged-app WAD picker and loading window were also verified. The
 windowed version uses a serial background GPU queue, one-shot tick deadlines,
 and a layer-backed image; Cocoa handles input and
@@ -66,42 +78,49 @@ Reproduce the uncapped benchmark with a render after every game tick:
   --output build/profile
 ```
 
-The latest 350-frame gameplay run took **6.326 seconds: 55.33 FPS** at the same
-320×200 resolution. Mean measured GPU time was **16.69 ms/render** and
-**0.579 ms/tick** across its changing views. Compilation/initialization are
-excluded from the timed loop; `gpu_ms` includes initialization, while the
-separate render/tick counters do not. [Raw benchmark](results/render-benchmark.json).
+The latest 350-frame gameplay run took **3.565 seconds: 98.17 FPS** at
+320×200. The same binary/shader with `--serial-render` took **6.508 seconds:
+53.78 FPS**. Measured rendering averaged **8.53 ms/frame** with cooperative
+opaque drawing versus **16.75 ms/frame** serially. Game ticks averaged
+**0.525 ms**. Both runs used identical inputs and 711 dispatches. Compilation,
+asset loading and initialization are excluded from the timed loop; total
+`gpu_ms` includes initialization, while render/tick counters do not.
+[Cooperative benchmark](results/render-benchmark.json),
+[serial benchmark](results/render-benchmark-serial.json).
 
-The original correctness build measured 7.69 FPS over 35 initial scripted
-frames. The table below isolates the **same initialized scene**, 12 measured
-samples per phase, to distinguish implementation speedups from changing views:
+The table isolates the **same initialized scene**, 12 measured samples per
+phase. The first build measured 7.69 FPS over 35 initial scripted frames; it is
+not the same gameplay sample count as the current benchmark.
 
-| GPU phase | First build | Current build |
-| --- | ---: | ---: |
-| Palette expansion | 82.87 ms | 0.321 ms |
-| Original world rendering | 41.16 ms | 17.53 ms |
-| Full frame | 125.27 ms | 18.27 ms |
+| GPU phase | First build | Before parallel drawing | Current build |
+| --- | ---: | ---: | ---: |
+| Palette expansion | 82.87 ms | 0.321 ms | 0.323 ms |
+| World rendering | 41.16 ms | 17.53 ms | 9.63 ms |
+| Full frame | 125.27 ms | 18.27 ms | 10.33 ms |
 
-Raw [baseline profile](results/profile-baseline.json) and
-[current profile](results/profile-current.json). Full-frame execution improved
-about 6.9× in this fixed-scene comparison. The per-phase sum differs slightly
+Raw [baseline profile](results/profile-baseline.json),
+[before parallel drawing](results/profile-before-parallel.json), and
+[current profile](results/profile-current.json). Per-phase sums differ slightly
 from full-frame time because of other display work and GPU clock variation.
 
-The fixes use cached GPU memory views, native loop/branch reconstruction, and
-cooperative palette expansion across one SIMD group. The original indexed
-rasterizer is unchanged. CPU reference equality is checked on the complete
-presented frame, including palettes and HUD, for all 351 captured frames.
+The renderer queues original high-detail opaque column/span parameters and
+consumes them across 32 lanes inside the same dispatch. Scene traversal,
+masked textures/sprites/fuzz/UI and low detail retain original serial behavior.
+Fixed-point sampling, column overwrite order, and resulting pixels are
+preserved. Queue overflow and impending texture-cache reclamation use a serial
+flush. No extra render dispatch or whole-threadgroup barrier is required.
 
-Foreground window testing measured roughly **32–35 FPS**, paced toward Doom's
-35 Hz game clock. Turning and firing were verified with the layer-backed view.
-The uncapped headless benchmark measures engine throughput; it is not a claim
-that the window presents 55 frames per second. macOS can throttle inactive
-windows, so background FPS does not describe foreground gameplay performance.
-First compilation of a changed engine still takes tens of seconds.
+The native window remains paced toward Doom's **35 Hz game clock**. Its FPS
+is not the 98 FPS uncapped engine throughput; the benefit is more timing
+headroom. The optimized foreground window was verified near 34–35 FPS, including
+turning, firing (ammo 50 → 49), and the original menu overlay.
+macOS can throttle inactive windows. First compilation of a changed engine
+still takes tens of seconds.
 
-World rasterization remains sequential on the GPU, so more parallelization is
-possible. The project does not claim to outperform native CPU Doom. See the
-[profiling methodology](performance.md) and [architecture](architecture.md).
+This does not claim to outperform native CPU Doom or to use every GPU core.
+It uses the intended single 32-lane game group, leaving the integration's other
+groups independent. See [profiling methodology](performance.md) and
+[architecture](architecture.md).
 
 Native recursion works, but depth 128 failed pipeline creation with
 `Compute pipeline exceeds available stack space`; depth 32 passed this suite.

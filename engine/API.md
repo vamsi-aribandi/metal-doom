@@ -20,6 +20,11 @@ All pointers below are 32-bit offsets into the instance's linear memory.
   one original `G_Ticker`; increments `gametic` once.
 - `engine_render()`: original indexed software renderer;
   no game tick. Time-based wipe transitions are skipped.
+- `engine_render_begin()` / `engine_render_end()`: GPU frontend staging around
+  collective opaque drawing. Begin runs display setup/scene traversal and queues
+  high-detail opaque commands; end runs original masked drawing and display UI.
+  These are internal; callers should use the collective native `doom_render`.
+- `engine_draw_queue() -> offset`: internal fixed-layout opaque draw queue.
 - `engine_index_buffer() -> offset`, `engine_palette() -> offset`: GPU frontend
   accessors used for cooperative native Metal presentation. The CPU reference
   retains the original palette conversion.

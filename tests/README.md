@@ -65,3 +65,22 @@ retains the original C conversion, so frame comparisons cover that optimization.
 branches with independently compiled ordinary C, including randomized inputs and
 side effects. `tests/test_lowering.py` checks the complete translated engine on
 CPU; its presentation adapter reconstructs RGB for its CFG-only comparisons.
+
+## Cooperative rendering
+
+```sh
+python3 tests/test_render_states.py --wad /absolute/path/to/doom1.wad
+python3 tests/test_queue_fallback.py --wad /absolute/path/to/doom1.wad
+```
+
+The first command (also included in `run_tests.py` / `test.sh`) uses a shared raw-key event schedule to compare 421 frame
+hashes and every diagnostic against original C. CPU-side assertions verify
+that low detail, smaller/full viewports, automap, menus, pause and gamma actually
+activate. Movement, turning and fire input are included. Its Metal fixture reuses
+the real native host. `--serial-render` checks the retained serial GPU path.
+
+The second command builds a temporary source copy with
+`DOOM_DRAW_FLUSH_LIMIT=16`, forcing serial overflow flushes while retaining the
+fixed queue ABI. It compares 36 frame hashes, every tick diagnostic and every
+final framebuffer byte, then removes the temporary source/build. Run the normal
+build/reference tests first. These tests do not bundle assets.

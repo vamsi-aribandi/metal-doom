@@ -1,1 +1,1 @@
-{"device":"Apple M4","ticks":350,"seconds":6.326088833,"gpu_ms":6343.852582,"dispatches":711,"state_hash":2092533111,"width":320,"height":200,"tick_gpu_ms":202.697206,"render_gpu_ms":5841.421501,"frames":350,"wall_fps":55.326444,"render_every_tick":true}
+{"device":"Apple M4","ticks":350,"seconds":3.565127833,"gpu_ms":3469.101491,"dispatches":711,"state_hash":2092533111,"width":320,"height":200,"tick_gpu_ms":183.806166,"render_gpu_ms":2987.082534,"frames":350,"wall_fps":98.173198,"render_every_tick":true,"serial_render":false}

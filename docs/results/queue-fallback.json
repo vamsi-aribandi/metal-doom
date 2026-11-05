@@ -1,0 +1,10 @@
+{
+  "flush_limit": 16,
+  "passed": true,
+  "frame_hashes_compared": 36,
+  "ticks_compared": 35,
+  "diagnostic_values_compared": 560,
+  "frame_bytes_compared": 256000,
+  "frame_sha256": "1820115a19dfeb0ae240d594a3159d5904335b6e46a196f4dd0b8a16012f37f7",
+  "final_state_hash": 2695997885
+}

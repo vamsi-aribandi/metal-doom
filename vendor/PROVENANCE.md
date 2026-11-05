@@ -24,3 +24,12 @@ expands the original indexed framebuffer and 256-entry gamma-adjusted palette
 cooperatively. The independent CPU reference retains the original conversion;
 all tested rendered frames match. No gameplay or indexed rasterization algorithm
 is replaced by this platform presentation adapter.
+
+The GPU build also applies `engine/parallel_draw.py` to generated copies:
+opaque high-detail column/span calls enqueue their original draw parameters;
+display resumes around a cooperative opaque draw, before original serial masked
+drawing/UI. Low-detail rendering stays serial. A zone-cache purge flushes pending
+commands before reclaiming their sources. The vendored files and CPU reference
+are unchanged. This bounded queue approach is informed by Jerry Zhu's MIT
+`doom-gpu/gpu_par.c`; its 256-thread CUDA barriers are not used here. Our queue,
+Metal consumer, and staged wrapper are GPL-2.0-or-later.

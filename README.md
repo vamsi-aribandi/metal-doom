@@ -6,7 +6,8 @@ execute on the GPU. The CPU loads assets, collects keyboard input, and presents
 completed frames. Starts in E1M1, skill 3, at 320×200; sound can wait.
 
 On the tested M4 Mac mini, the 350-frame gameplay benchmark runs at **about
-55 FPS**, versus 7.7 FPS in the first correctness build. The window is paced to
+98 FPS**, versus 54 FPS with serial world drawing in the same build and
+7.7 FPS in the first correctness build. The window is paced to
 Doom's 35 Hz game clock; foreground testing measured roughly 32–35 FPS. All 351
 captured frames match the independent CPU reference. See
 [measurements and tests](docs/validation.md).
@@ -58,8 +59,10 @@ conversion, and full-frame GPU time. [Methodology](docs/performance.md).
 The source translation is C → freestanding wasm32 → typed C → native Metal.
 WebAssembly is an intermediate representation, not a runtime interpreter. Hot
 control flow becomes native loops and branches, with a conservative fallback.
-Doom's original indexed renderer runs on the owner lane; one SIMD group expands
-its exact palette in parallel inside the same render function and dispatch.
+Doom's gameplay and scene traversal run on the owner lane. Opaque columns and
+spans draw across one SIMD group, preserving fixed-point sampling and draw order.
+Sprites, special effects, and UI retain their original serial drawing. Palette
+expansion uses that same SIMD group in the same render call and dispatch.
 
 `build/doom-engine.metal` contains the reusable device functions and explicit
 `DoomState`, without a kernel entrypoint. `app/dispatch.metal` supplies the
@@ -69,8 +72,9 @@ there are no CPU callbacks or mandatory separate engine launches.
 See [architecture and remaining megakernel work](docs/architecture.md),
 [engine ABI](engine/API.md), [credits](CREDITS.md), and
 [source provenance](vendor/PROVENANCE.md). Combined training/inference scheduling
-has not been tested. World rasterization is still serial, so there is more GPU
-performance work available. Audio and save/config persistence are unavailable;
+has not been tested. Only opaque pixel drawing is parallel; scene traversal
+and sprites remain serial. Further optimization should follow measurements.
+Audio and save/config persistence are unavailable;
 long sessions, full levels, and other maps need broader testing.
 
 GPL-2.0-or-later, with retained MIT third-party components. Proprietary WADs and

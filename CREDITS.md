@@ -7,7 +7,9 @@ Vendored DoomGeneric is GPL-2.0-or-later; see LICENSE and individual source head
 
 Minimal freestanding libc adapted from Jerry Zhu's open-flapping-airplanes
 (2026), MIT. Original license retained in vendor/tinylibc/LICENSE. GPU porting
-approaches also informed by Joseph Huber's doomgeneric GPU port and LLVM GPU libc.
+approaches, including the opaque draw queue, also informed by Jerry Zhu's
+`doom-gpu/gpu_par.c` (MIT). GPU compilation approaches informed by Joseph
+Huber's doomgeneric GPU port and LLVM GPU libc.
 Exact source revisions and modifications: vendor/PROVENANCE.md.
 
 New Metal adapter, generator, standalone host and tests: GPL-2.0-or-later.

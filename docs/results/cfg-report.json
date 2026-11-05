@@ -1,9 +1,9 @@
 {
   "passed": true,
-  "functions": 725,
-  "lowered_functions": 507,
+  "functions": 740,
+  "lowered_functions": 516,
   "ticks": 350,
-  "source_sha256": "e9e343aa50a4460e6f9cf5ee64fe3b605a73e52460ce734aa7e11e3ba9bf9ebc",
+  "source_sha256": "c428a8b8cbf00a99428259de6ca2ee96ff3eae45d09bbbcc99aadc4207f98e18",
   "wad_sha256": "1d7d43be501e67d927e415e0b8f3e29c3bf33075e859721816f652a526cac771",
   "final_state": [
     351,
@@ -40,13 +40,13 @@
   },
   "timing": {
     "original": {
-      "compile_seconds": 4.569433666,
-      "run_seconds": 0.2636274579999993,
+      "compile_seconds": 4.706249042,
+      "run_seconds": 0.22279212500000067,
       "stdout": "final_state=351,0,100,0,69162692,-189793744,0,1073741824,0,0,0,95,156,351,1,0"
     },
     "lowered": {
-      "compile_seconds": 5.235654,
-      "run_seconds": 0.27064879200000114,
+      "compile_seconds": 5.356040333999999,
+      "run_seconds": 0.3101148330000001,
       "stdout": "final_state=351,0,100,0,69162692,-189793744,0,1073741824,0,0,0,95,156,351,1,0"
     }
   }

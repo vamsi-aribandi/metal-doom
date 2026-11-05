@@ -68,6 +68,7 @@ void engine_tick(void) {
   G_Ticker();
   ++gametic;
 }
+int engine_can_render(void) { return initialized && !tl_exited; }
 void engine_render(void) {
   if (!initialized || tl_exited)
     return;

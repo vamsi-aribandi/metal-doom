@@ -66,7 +66,15 @@ def main():
                 run(repeat_command)
                 result['gpu_deterministic_replay'] = compare(gpu, gpu_repeat)
         results.append(result)
-    report = {'passed': True, 'cpu_only': args.cpu_only, 'wad_sha256': wad_sha, 'cases': results}
+    renderer_output = args.output / 'render-states'
+    renderer_command = [sys.executable, ROOT / 'tests/test_render_states.py',
+                        '--wad', args.wad, '--output', renderer_output]
+    if args.cpu_only:
+        renderer_command.append('--cpu-only')
+    run(renderer_command)
+    report = {'passed': True, 'cpu_only': args.cpu_only, 'wad_sha256': wad_sha,
+              'cases': results,
+              'renderer_states': json.loads((renderer_output / 'report.json').read_text())}
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))
