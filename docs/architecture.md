@@ -46,8 +46,9 @@ The generator writes:
 
 - `build/doom-engine.metal`: runtime, translated engine, and ordinary device
   entrypoints; **no kernel entrypoint**.
-- `build/doom.metal`: that engine plus `app/dispatch.metal`, the standalone's
-  small operation dispatcher.
+- `build/doom.metal`: that engine plus the ordered operation dispatcher.
+- `build/doom-persistent.metal`: that engine plus the standalone persistent loop
+  and its live host protocol. The native app uses this version by default.
 
 Public GPU functions are in `engine/entrypoints.metal`:
 
@@ -68,25 +69,26 @@ functions with the same state and arguments. Tick, input, and allocation have
 one owner, lane zero. Only SIMD-group device-memory barriers are used; no full
 threadgroup barrier constrains independent workloads.
 
-The standalone puts input, ticks and rendering into one command buffer per
-frame and waits once. Dispatches remain separate, with serial encoders and
-tracked resource dependencies. Each operation's arguments are copied with
-`setBytes` at buffer index 3; the shared mailbox is reserved for outputs and
-render-mode configuration, avoiding overwritten arguments within a batch.
-The app supports up to eight catch-up ticks before a render. That scheduling
-belongs to the host, not the engine. A
-persistent caller can preload assets and invoke binding, initialization, ticks,
-and rendering from its own kernel without a CPU handshake between calls.
-See [engine details](../engine/API.md) for the translated frontend's offsets and
-input/diagnostic layout.
+The standalone defaults to one persistent dispatch. It binds state, allocates
+and copies assets, initializes Doom, then loops over input, ticks, rendering and
+publication until shutdown. The CPU supplies keyboard state and elapsed time;
+the GPU owns 35 Hz scheduling. Acknowledged snapshots protect live framebuffer
+reads. The standalone protocol uses experimental system-coherent Metal accesses;
+see [persistent execution](persistent.md) for its limitations and tests.
+
+`--dispatch` retains the ordered backend. Input, ticks and rendering use separate
+serial encoders in one command buffer per frame, with one completion wait.
+Operation arguments are copied with `setBytes`; the shared mailbox holds only
+outputs and configuration. This backend remains the default for headless tests
+and isolated profiling; `--persistent --headless` selects a preloaded GPU replay.
+Neither backend changes the reusable engine API.
 
 Simulation advances at 35 ticks per second. Rendering remains separate and can
 consume Doom's original rendering PRNG, especially for fuzzy sprites; CPU/GPU
-comparisons therefore use identical tick/render schedules. The GUI paces frames
-to game ticks with a one-shot timer and runs GPU work on a serial background
-queue. Sound and wipe transitions are disabled.
+comparisons therefore use identical tick/render schedules. Sound and wipe
+transitions are disabled.
 
-# Before persistent megakernel integration
+# Before combined training/inference integration
 
 Inspected target: `vamsi-aribandi/metal-megakernel` commit `74b72a9`, one
 96-thread threadgroup with independent training, inference, and game SIMD groups.
@@ -99,9 +101,9 @@ Inspected target: `vamsi-aribandi/metal-megakernel` commit `74b72a9`, one
 3. Link the generated visible functions and validate call-stack/register limits
    in the **combined** pipeline. Depth 32 passes the standalone suite; depth
    128 exceeded the M4's available stack. Combined ML resource use is untested.
-4. Add input/frame ownership and double buffering around this API. Standalone
-   command completion does not establish a live CPU/persistent-GPU mailbox.
-   The target's experimental `coherent(system)` mechanism remains separate.
+4. Adapt the standalone's acknowledged input/frame protocol to the combined
+   scheduler. Its experimental `coherent(system)` mechanism is now validated with
+   real Doom in a persistent dispatch, but remains outside the engine API.
 5. Measure tick/render latency alongside real ML work. Opaque columns/spans
    already share the game SIMD group; scene traversal,
    masked drawing and low detail remain sequential. Optimize further only if

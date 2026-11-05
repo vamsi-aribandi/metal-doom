@@ -44,7 +44,7 @@ native loops/branches, and expands palette pixels across one SIMD group. The
 world renderer preserves original scene traversal, sampling and draw order.
 Opaque high-detail columns/spans now draw across the 32 game lanes; masked
 textures/sprites/fuzz/UI and low detail remain serial. Palette expansion shares the
-render dispatch and uses no whole-threadgroup barrier. The native window uses
+render dispatch and uses no whole-threadgroup barrier. The dispatch backend's native window uses
 precise one-shot pacing and a layer-backed image rather than repainting a scaled
 bitmap and title bar every frame.
 
@@ -66,7 +66,7 @@ throughput run. The renderer keeps one dispatch per frame and uses only the
 
 ## Submission overhead
 
-The app submits input, ticks, and rendering in one command buffer, then waits
+The `--dispatch` backend submits input, ticks, and rendering in one command buffer, then waits
 once. It retains separate ordered compute encoders with immutable per-operation
 arguments; dispatch count and the engine API are unchanged. `--no-batch` restores
 one submission/wait per operation for headless comparisons.
@@ -77,7 +77,11 @@ excluding initialization. Batched runs also record `batched_frame_gpu_ms`,
 including input, ticking and rendering. Their individual `tick_gpu_ms` and
 `render_gpu_ms` are `null`, because command-buffer timestamps cannot separate
 those stages. The isolated profiler continues to report individual phases;
-the window displays combined GPU frame time.
+the dispatch window displays combined GPU frame time.
+
+The default persistent window displays FPS instead: its single command's GPU
+timestamps are available only after shutdown and include idle waits. Persistent
+execution and comparison commands are described in [persistent execution](persistent.md).
 
 To repeat the controlled experiment:
 
@@ -91,3 +95,18 @@ that lets the two queue helpers inline. All final frames and tick traces must
 match. The tested batching gain was about 7%; allowing the helpers to inline
 made no measurable difference. The production translator remains unchanged.
 [Raw experiment](results/overhead-benchmark.json).
+
+## Persistent replay
+
+```sh
+python3 tests/benchmark_persistent.py --wad /path/to/doom1.wad --repeats 3
+```
+
+This warms each backend, then alternates the same 350-tick scripted scene with a
+render after every tick. Tick traces and final pixels must match before timings
+are accepted. The measured medians on the M4 were 105.95 FPS for persistent
+replay and 102.75 FPS for ordered dispatch. Both include host frame handoff;
+compilation and initialization are excluded. This modest difference does not
+make Doom's serial gameplay and traversal parallel. The main change is one
+running command instead of per-frame GPU submissions.
+[Recorded results](results/persistent-benchmark.json).

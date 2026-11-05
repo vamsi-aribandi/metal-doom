@@ -20,3 +20,13 @@ LLVM and LLD are external build tools. No proprietary game assets are included.
 The future metal-megakernel integration target has a separate MIT license.
 A distributed combined program containing this Doom engine must satisfy the
 Doom GPL obligations, including providing corresponding source.
+
+The live CPU/GPU mailbox uses system-coherent pointer and fence spelling
+informed by Liu Liu's [ccv Metal/ANE implementation](https://github.com/liuliu/ccv/blob/baa0ef3178c31a5f42befe50d5dd4a53cedbc84a/lib/nnc/mfa/ccv_nnc_mfa_ane_rowwise_coreml.mm#L368).
+Its BSD 3-Clause notice is retained in
+[vendor/licenses/ccv-BSD-3-Clause.txt](vendor/licenses/ccv-BSD-3-Clause.txt).
+The protocol builds on the visibility experiments in
+[metal-megakernel](https://github.com/vamsi-aribandi/metal-megakernel), revision
+`74b72a9d9567f4503650cd48f8a0bfff9ba62785`;
+its [MIT notice](vendor/licenses/metal-megakernel-MIT.txt) is retained. It relies on undocumented Metal
+compiler behavior; see [persistent execution](docs/persistent.md).

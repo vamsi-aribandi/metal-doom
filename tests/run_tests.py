@@ -71,6 +71,18 @@ def main():
                 repeat_command = [args.binary, '--wad', args.wad, '--headless', '--ticks', ticks, '--output', gpu_repeat, '--scripted']
                 run(repeat_command)
                 result['gpu_deterministic_replay'] = compare(gpu, gpu_repeat)
+            persistent_output = args.output / (name + '-persistent')
+            persistent_command = [args.binary, '--persistent', '--headless', '--wad', args.wad,
+                                  '--ticks', ticks, '--output', persistent_output]
+            if scripted:
+                persistent_command.append('--scripted')
+            if name == 'rendered':
+                persistent_command.extend(['--render-every-tick', '--frame-hashes'])
+            run(persistent_command)
+            result['persistent_vs_original_c'] = compare(reference, persistent_output)
+            metrics = json.loads((persistent_output / 'summary.json').read_text())
+            if metrics['dispatches'] != 1 or metrics['submissions'] != 1 or metrics['completion_reason'] != 2:
+                raise AssertionError(f'Headless replay did not use one persistent dispatch: {metrics}')
         results.append(result)
     renderer_output = args.output / 'render-states'
     renderer_command = [sys.executable, ROOT / 'tests/test_render_states.py',
@@ -88,6 +100,11 @@ def main():
               'cases': results,
               'renderer_states': json.loads((renderer_output / 'report.json').read_text()),
               'catchup': json.loads((catchup_output / 'report.json').read_text())}
+    if not args.cpu_only:
+        persistent_output = args.output / 'persistent'
+        run([sys.executable, ROOT / 'tests/test_persistent.py', '--wad', args.wad,
+             '--output', persistent_output])
+        report['persistent'] = json.loads((persistent_output / 'report.json').read_text())
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))

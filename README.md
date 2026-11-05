@@ -70,8 +70,13 @@ and scene traversal. Opaque surfaces and palette conversion run across 32
 threads. Sprites, special effects, and low-detail rendering use the original
 serial drawing code.
 The CPU loads the IWAD, collects input, and displays completed frames. The app
-submits input, game ticks, and rendering together in one Metal command buffer
-per frame.
+launches one persistent Metal kernel that initializes Doom, then runs its game
+loop until quit. Engine state stays on the GPU.
+
+Live input and frame exchange use an experimental Metal compiler feature tested
+on the M4. Run with `--dispatch` to use the public-API backend that submits work
+per frame. See [persistent execution](docs/persistent.md) for the protocol and
+compatibility details.
 
 The engine and app are separate:
 
@@ -79,7 +84,7 @@ The engine and app are separate:
   and rendering functions.
 - `tools/` translates the compiled engine into Metal.
 - `app/` contains the native window, input handling, and standalone dispatch
-  kernel.
+  kernels.
 - `vendor/` contains the upstream engine and minimal C library.
 
 The generated `build/doom-engine.metal` can be embedded in another Metal
@@ -102,5 +107,5 @@ of the engine. See [test instructions](tests/README.md),
 
 ## License
 
-GPL-2.0-or-later, with MIT-licensed components. See [LICENSE](LICENSE),
+GPL-2.0-or-later, with MIT- and BSD-licensed components. See [LICENSE](LICENSE),
 [credits](CREDITS.md), and [source provenance](vendor/PROVENANCE.md).

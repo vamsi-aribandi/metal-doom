@@ -102,3 +102,29 @@ python3 tests/benchmark_overhead.py --wad /absolute/path/to/doom1.wad
 The benchmark compares output hashes before reporting timing and excludes
 shader compilation, initialization and warmups. It keeps the discarded inline
 experiment in its test shader only; normal engine generation is unchanged.
+
+## Persistent dispatch
+
+The standard suite also runs all four headless cases through `--persistent`,
+checking the same CPU traces and final pixels while asserting one submission and
+one dispatch, including initialization. It then runs the dedicated persistent
+tests: two render-state replays and a five-second live input test.
+
+```sh
+python3 tests/test_persistent.py --wad /absolute/path/to/doom1.wad
+python3 tests/test_persistent.py --wad /absolute/path/to/doom1.wad --live-seconds 60
+```
+
+The replay fixtures preload their operations on the GPU; host acknowledgements
+only release immutable snapshots. The tests assert that every snapshot arrives
+before the one command completes. Realtime tests change keyboard state while
+that command is running, record the GPU's observed input and render schedule,
+then reproduce it in a fresh independent C reference process. Every captured
+frame hash and all sixteen diagnostics must match. They also hold a snapshot
+without acknowledging it, verify its pixels remain unchanged, and stop the
+kernel from that waiting state. Reports and subprocess logs are saved beneath
+`build/persistent-tests/` (or the supplied output directory).
+
+These tests require the experimental live-memory mechanism described in
+[persistent execution](../docs/persistent.md). They test actual Doom in a single
+running dispatch, without adding GPU visibility probes or extra submissions.

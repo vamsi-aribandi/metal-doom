@@ -33,7 +33,8 @@ All pointers below are 32-bit offsets into the instance's linear memory.
 - `engine_diagnostics() -> offset`: 16 signed 32-bit integers, ordered:
   `gametic, gamestate, health, armor, x, y, z, angle, kills, items, secrets,
   rndindex, prndindex, leveltime, readyweapon, exit_flag`. Position uses Doom's
-  16.16 fixed point; angle preserves its unsigned 32-bit bit pattern.
+  16.16 fixed point; angle preserves its unsigned 32-bit bit pattern. This
+  accessor refreshes the array and must run on the instance owner lane.
 - `engine_log() -> offset`, `engine_log_size() -> bytes`: startup/error log.
 
 Keyboard defaults are DoomGeneric's: left `0xac`, up `0xad`, right `0xae`, down
@@ -41,8 +42,9 @@ Keyboard defaults are DoomGeneric's: left `0xac`, up `0xad`, right `0xae`, down
 `0xb6`; menu Escape is 27, Enter is 13, and weapon keys use ASCII 1 through 7.
 
 The engine does not call the CPU, perform host IO, read wall time, or request a
-kernel dispatch. The clock is deterministic at 35 ticks per second. The host
-controls scheduling. The linear memory is fixed at 96 MiB; its 64 MiB outer
+kernel dispatch. The clock is deterministic at 35 ticks per second. Scheduling
+belongs to the caller: the standalone persistent kernel schedules ticks using
+host-supplied time, while the dispatch backend schedules them on the CPU. The linear memory is fixed at 96 MiB; its 64 MiB outer
 allocator is monotonic, while Doom's zone allocator internally reuses gameplay
 allocations. Save/config writes and sound output are unavailable.
 

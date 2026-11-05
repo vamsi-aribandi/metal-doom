@@ -33,3 +33,10 @@ commands before reclaiming their sources. The vendored files and CPU reference
 are unchanged. This bounded queue approach is informed by Jerry Zhu's MIT
 `doom-gpu/gpu_par.c`; its 256-thread CUDA barriers are not used here. Our queue,
 Metal consumer, and staged wrapper are GPL-2.0-or-later.
+
+`licenses/ccv-BSD-3-Clause.txt` preserves Liu Liu's BSD 3-Clause notice. The
+standalone persistent mailbox's compiler-internal system-coherent pointer and
+fence spelling follows ccv's Metal/ANE implementation at
+`baa0ef3178c31a5f42befe50d5dd4a53cedbc84a`, informed by the local
+metal-megakernel visibility experiments at `74b72a9d9567f4503650cd48f8a0bfff9ba62785`.
+No ccv model code or assets are included. See CREDITS.md and docs/persistent.md.

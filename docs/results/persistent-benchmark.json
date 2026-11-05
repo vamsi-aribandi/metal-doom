@@ -1,0 +1,89 @@
+{
+  "device": "Apple M4",
+  "ticks": 350,
+  "render_every_tick": true,
+  "resolution": [
+    320,
+    200
+  ],
+  "warmups_per_backend": 1,
+  "trials": [
+    {
+      "trial": 1,
+      "backend": "dispatch",
+      "fps": 103.304773,
+      "seconds": 3.388033208,
+      "dispatches": 711,
+      "submissions": 353,
+      "hashes": {
+        "ticks.csv": "6599bcc7dce97e267e0c9b33a92a1a2436620978db241781fd7c292af2a25fd5",
+        "frame.rgba": "aadefb30246a9c756eb1d59456099c8ffe1e700c4552f72287395e402c755c85"
+      }
+    },
+    {
+      "trial": 1,
+      "backend": "persistent",
+      "fps": 105.61658701570634,
+      "seconds": 3.313873416,
+      "dispatches": 1,
+      "submissions": 1,
+      "hashes": {
+        "ticks.csv": "6599bcc7dce97e267e0c9b33a92a1a2436620978db241781fd7c292af2a25fd5",
+        "frame.rgba": "aadefb30246a9c756eb1d59456099c8ffe1e700c4552f72287395e402c755c85"
+      }
+    },
+    {
+      "trial": 2,
+      "backend": "dispatch",
+      "fps": 102.745093,
+      "seconds": 3.406488708,
+      "dispatches": 711,
+      "submissions": 353,
+      "hashes": {
+        "ticks.csv": "6599bcc7dce97e267e0c9b33a92a1a2436620978db241781fd7c292af2a25fd5",
+        "frame.rgba": "aadefb30246a9c756eb1d59456099c8ffe1e700c4552f72287395e402c755c85"
+      }
+    },
+    {
+      "trial": 2,
+      "backend": "persistent",
+      "fps": 106.15421345722356,
+      "seconds": 3.297090041,
+      "dispatches": 1,
+      "submissions": 1,
+      "hashes": {
+        "ticks.csv": "6599bcc7dce97e267e0c9b33a92a1a2436620978db241781fd7c292af2a25fd5",
+        "frame.rgba": "aadefb30246a9c756eb1d59456099c8ffe1e700c4552f72287395e402c755c85"
+      }
+    },
+    {
+      "trial": 3,
+      "backend": "dispatch",
+      "fps": 102.724085,
+      "seconds": 3.407185375,
+      "dispatches": 711,
+      "submissions": 353,
+      "hashes": {
+        "ticks.csv": "6599bcc7dce97e267e0c9b33a92a1a2436620978db241781fd7c292af2a25fd5",
+        "frame.rgba": "aadefb30246a9c756eb1d59456099c8ffe1e700c4552f72287395e402c755c85"
+      }
+    },
+    {
+      "trial": 3,
+      "backend": "persistent",
+      "fps": 105.9451445700003,
+      "seconds": 3.303596417,
+      "dispatches": 1,
+      "submissions": 1,
+      "hashes": {
+        "ticks.csv": "6599bcc7dce97e267e0c9b33a92a1a2436620978db241781fd7c292af2a25fd5",
+        "frame.rgba": "aadefb30246a9c756eb1d59456099c8ffe1e700c4552f72287395e402c755c85"
+      }
+    }
+  ],
+  "median_fps": {
+    "dispatch": 102.745093,
+    "persistent": 105.9451445700003
+  },
+  "note": "Wall throughput includes frame handoff; persistent GPU timestamps include initialization and idle. No frame-hash instrumentation during timing."
+}

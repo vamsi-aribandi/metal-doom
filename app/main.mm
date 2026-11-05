@@ -11,8 +11,10 @@
 #include <vector>
 #include <string>
 #include <stdexcept>
+#include <thread>
+#include "persistent_protocol.h"
 
-static constexpr uint32_t MemoryBytes = 64u * 1024u * 1024u;
+static constexpr uint32_t MemoryBytes = 96u * 1024u * 1024u;
 static constexpr uint32_t Width = 320, Height = 200;
 static std::string sha256(const uint8_t *bytes, size_t length) {
   unsigned char digest[CC_SHA256_DIGEST_LENGTH];
@@ -49,6 +51,21 @@ static std::string boundedError(NSError *error) {
     text += "\n[Diagnostic truncated; total " + std::to_string(total) + " bytes]";
   }
   return text;
+}
+static unsigned parseCount(NSString *value, unsigned minimum, unsigned maximum, const char *flag) {
+  std::string text = value.UTF8String;
+  unsigned count = 0;
+  bool valid = !text.empty();
+  for (char c : text) {
+    if (c < '0' || c > '9' || count > (maximum - unsigned(c - '0')) / 10) {
+      valid = false; break;
+    }
+    count = count * 10 + unsigned(c - '0');
+  }
+  if (!valid || count < minimum || count > maximum)
+    throw std::runtime_error(std::string(flag) + " must be a decimal integer from " +
+                             std::to_string(minimum) + " to " + std::to_string(maximum));
+  return count;
 }
 static uint32_t little32(const uint8_t *p) {
   return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
@@ -100,7 +117,7 @@ public:
   bool batchFrames = true;
   struct Operation { uint32_t code, a = 0, b = 0; };
   NSUInteger workers = 32;
-  Engine(NSString *shader) {
+  Engine(NSString *shader, NSString *entry = @"doom_dispatch") {
     device = MTLCreateSystemDefaultDevice();
     if (!device)
       throw std::runtime_error("A Metal device is required");
@@ -123,9 +140,9 @@ public:
     MTLLinkedFunctions *links = [MTLLinkedFunctions new];
     links.functions = visible;
     MTLComputePipelineDescriptor *desc = [MTLComputePipelineDescriptor new];
-    desc.computeFunction = [library newFunctionWithName:@"doom_dispatch"];
+    desc.computeFunction = [library newFunctionWithName:entry];
     if (!desc.computeFunction)
-      throw std::runtime_error("Missing Metal entry doom_dispatch");
+      throw std::runtime_error("Missing Metal entry " + std::string(entry.UTF8String));
     desc.linkedFunctions = links;
     desc.maxCallStackDepth = 32;
     pipeline = [device newComputePipelineStateWithDescriptor:desc
@@ -184,6 +201,7 @@ public:
   }
   void load(NSData *d, NSString *initial) {
     NSData *image = readData(initial);
+    if (image.length != MemoryBytes) throw std::runtime_error("Expected a 96 MiB engine memory image");
     memory = [device newBufferWithLength:MAX(NSUInteger(MemoryBytes), image.length)
                                  options:MTLResourceStorageModeShared];
     memset(memory.contents, 0, memory.length);
@@ -251,6 +269,8 @@ public:
     return currentPixels();
   }
 };
+
+#include "persistent_host.h"
 
 @interface DoomView : NSView
 @property(nonatomic) uint32_t keys;
@@ -378,6 +398,8 @@ public:
 @property(nonatomic, strong) DoomView *view;
 @property(nonatomic, strong) dispatch_source_t frameTimer;
 @property(nonatomic) Engine *engine;
+@property(nonatomic) PersistentEngine *liveEngine;
+@property(nonatomic) BOOL usePersistent;
 @property(nonatomic, copy) NSString *shaderPath;
 @property(nonatomic, copy) NSString *initialPath;
 @property(nonatomic, strong) NSData *wadData;
@@ -386,6 +408,7 @@ public:
 @property(nonatomic, strong) dispatch_queue_t worker;
 @property(nonatomic) BOOL inFlight;
 @property(nonatomic) BOOL stopping;
+@property(nonatomic) BOOL loading;
 @property(nonatomic) double previousDisplay;
 @property(nonatomic) double firstDisplay;
 @property(nonatomic) unsigned frameSequence;
@@ -440,6 +463,7 @@ public:
     [self startEngine];
 }
 - (void)startEngine {
+  self.loading = YES;
   self.view.loadingMessage = @"Loading Doom… Compiling the GPU engine.";
   [self.view setNeedsDisplay:YES];
   NSString *shader = self.shaderPath, *initial = self.initialPath;
@@ -447,16 +471,32 @@ public:
   dispatch_async(self.worker, ^{
     @autoreleasepool {
       Engine *created = nullptr;
+      PersistentEngine *live = nullptr;
       try {
         fprintf(stderr, "GUI background GPU initialization started\n");
-        created = new Engine(shader);
-        created->load(wad, initial);
+        if (self.usePersistent) {
+          live = new PersistentEngine(shader);
+          live->start(wad, initial);
+          live->waitFrame();
+          fprintf(stderr, "GUI persistent dispatch initialized; %s\n", live->log.c_str());
+        } else {
+          created = new Engine(shader);
+          created->load(wad, initial);
+        }
         dispatch_async(dispatch_get_main_queue(), ^{
+          self.loading = NO;
           if (self.stopping) {
+            if (live) {
+              live->stop();
+              fprintf(stderr, "GUI startup cancelled status=%ld dispatches=%u\n",
+                      (long)live->command.status, live->dispatches);
+            }
             delete created;
+            delete live;
             return;
           }
           self.engine = created;
+          self.liveEngine = live;
           self.wadData = nil;
           self.view.loadingMessage = nil;
           self.last = std::chrono::steady_clock::now();
@@ -467,14 +507,18 @@ public:
           dispatch_source_set_event_handler(self.frameTimer, ^{
             [weakSelf update];
           });
-          [self scheduleNextFrame];
+          if (self.usePersistent)
+            dispatch_source_set_timer(self.frameTimer, DISPATCH_TIME_NOW, NSEC_PER_SEC / 240, 100000);
+          else [self scheduleNextFrame];
           dispatch_activate(self.frameTimer);
           fprintf(stderr, "GUI background GPU initialization complete\n");
         });
       } catch (const std::exception &e) {
         delete created;
+        delete live;
         NSString *message = [NSString stringWithUTF8String:e.what()];
         dispatch_async(dispatch_get_main_queue(), ^{
+          self.loading = NO;
           [self showError:message];
         });
       }
@@ -487,6 +531,7 @@ public:
     return;
   self.stopping = YES;
   [self stopFrameTimer];
+  if (self.liveEngine) self.liveEngine->requestStop();
   fprintf(stderr, "Metal Doom: %s\n", message.UTF8String);
   self.view.loadingMessage = @"Doom could not start.";
   [self.view setNeedsDisplay:YES];
@@ -507,6 +552,25 @@ public:
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)application {
   self.stopping = YES;
   [self stopFrameTimer];
+  if (self.loading) {
+    // Finish creation before releasing any buffers held by the pending command.
+    // Its main-queue completion deletes the stopped instance before this reply.
+    dispatch_async(self.worker, ^{
+      dispatch_async(dispatch_get_main_queue(), ^{ [application replyToApplicationShouldTerminate:YES]; });
+    });
+    return NSTerminateLater;
+  }
+  if (self.liveEngine) {
+    self.liveEngine->requestStop();
+    dispatch_async(self.worker, ^{
+      self.liveEngine->stop();
+      fprintf(stderr, "GUI persistent dispatch stopped status=%ld frames=%u dispatches=%u\n",
+              (long)self.liveEngine->command.status, self.liveEngine->sequence,
+              self.liveEngine->dispatches);
+      dispatch_async(dispatch_get_main_queue(), ^{ [application replyToApplicationShouldTerminate:YES]; });
+    });
+    return NSTerminateLater;
+  }
   return NSTerminateNow;
 }
 - (void)stopFrameTimer {
@@ -526,7 +590,75 @@ public:
                             dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
                             DISPATCH_TIME_FOREVER, 100000);
 }
+
+- (void)displayFrame:(NSData *)frame state:(const int32_t *)state frameMS:(double)frameMS keys:(uint32_t)keys {
+  int32_t gametic = state[0], x = state[4], y = state[5], angle = state[7];
+  const uint8_t *p = (const uint8_t *)frame.bytes;
+  NSBitmapImageRep *b =
+      [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nullptr
+                                              pixelsWide:Width
+                                              pixelsHigh:Height
+                                           bitsPerSample:8
+                                         samplesPerPixel:4
+                                                hasAlpha:YES
+                                                isPlanar:NO
+                                          colorSpaceName:NSDeviceRGBColorSpace
+                                             bytesPerRow:Width * 4
+                                            bitsPerPixel:32];
+  for (unsigned i = 0; i < Width * Height; ++i) {
+    b.bitmapData[i * 4] = p[i * 4 + 2];
+    b.bitmapData[i * 4 + 1] = p[i * 4 + 1];
+    b.bitmapData[i * 4 + 2] = p[i * 4];
+    b.bitmapData[i * 4 + 3] = 255;
+  }
+  self.view.bitmap = b;
+  double current =
+      std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch())
+          .count();
+  double fps = self.previousDisplay ? 1.0 / (current - self.previousDisplay) : 0;
+  self.previousDisplay = current;
+  if (!self.frameSequence)
+    self.firstDisplay = current;
+  ++self.frameSequence;
+  double averageFPS =
+      self.frameSequence > 1 ? (self.frameSequence - 1) / (current - self.firstDisplay) : 0;
+  if (self.frameSequence == 1 || self.frameSequence % 35 == 0) {
+    fprintf(stderr, "GUI frame=%u fps=%.2f average_fps=%.2f mode=%s keys=%u gametic=%d "
+                    "x=%d y=%d angle=%d",
+            self.frameSequence, fps, averageFPS, self.usePersistent ? "persistent" : "dispatch",
+            keys, gametic, x, y, angle);
+    if (!self.usePersistent) fprintf(stderr, " gpu_frame_ms=%.3f", frameMS);
+    fputc('\n', stderr);
+  }
+  // Updating the title every frame needlessly redraws AppKit chrome.
+  if (!self.lastTitleUpdate || current - self.lastTitleUpdate >= 0.5) {
+    double titleFPS = self.lastTitleUpdate ? (self.frameSequence - self.lastTitleFrame) /
+                                                 (current - self.lastTitleUpdate)
+                                           : fps;
+    self.window.title = self.usePersistent
+        ? [NSString stringWithFormat:@"Metal Doom · %.1f FPS · Persistent GPU · Esc quit", titleFPS]
+        : [NSString stringWithFormat:@"Metal Doom · %.1f FPS · GPU %.1f ms/frame · Esc quit", titleFPS, frameMS];
+    self.lastTitleUpdate = current;
+    self.lastTitleFrame = self.frameSequence;
+  }
+
+}
+- (void)updatePersistent {
+  if (self.stopping || !self.liveEngine) return;
+  try {
+    self.liveEngine->input(self.view.keys);
+    if (self.liveEngine->poll()) {
+      NSData *frame = [NSData dataWithBytes:self.liveEngine->pixelsCopy() length:Width * Height * 4];
+      [self displayFrame:frame state:self.liveEngine->stateCopy frameMS:0 keys:self.view.keys];
+    }
+    if (self.liveEngine->command.status >= MTLCommandBufferStatusCompleted)
+      throw std::runtime_error("Persistent kernel stopped unexpectedly");
+  } catch (const std::exception &e) {
+    [self showError:[NSString stringWithUTF8String:e.what()]];
+  }
+}
 - (void)update {
+  if (self.usePersistent) { [self updatePersistent]; return; }
   auto now = std::chrono::steady_clock::now();
   self.accumulator += std::chrono::duration<double>(now - self.last).count();
   self.last = now;
@@ -556,52 +688,9 @@ public:
           self.inFlight = NO;
           if (self.stopping)
             return;
-          const uint8_t *p = (const uint8_t *)frame.bytes;
-          NSBitmapImageRep *b =
-              [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:nullptr
-                                                      pixelsWide:Width
-                                                      pixelsHigh:Height
-                                                   bitsPerSample:8
-                                                 samplesPerPixel:4
-                                                        hasAlpha:YES
-                                                        isPlanar:NO
-                                                  colorSpaceName:NSDeviceRGBColorSpace
-                                                     bytesPerRow:Width * 4
-                                                    bitsPerPixel:32];
-          for (unsigned i = 0; i < Width * Height; ++i) {
-            b.bitmapData[i * 4] = p[i * 4 + 2];
-            b.bitmapData[i * 4 + 1] = p[i * 4 + 1];
-            b.bitmapData[i * 4 + 2] = p[i * 4];
-            b.bitmapData[i * 4 + 3] = 255;
-          }
-          self.view.bitmap = b;
-          double current =
-              std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch())
-                  .count();
-          double fps = self.previousDisplay ? 1.0 / (current - self.previousDisplay) : 0;
-          self.previousDisplay = current;
-          if (!self.frameSequence)
-            self.firstDisplay = current;
-          ++self.frameSequence;
-          double averageFPS =
-              self.frameSequence > 1 ? (self.frameSequence - 1) / (current - self.firstDisplay) : 0;
-          if (self.frameSequence == 1 || self.frameSequence % 35 == 0)
-            fprintf(stderr,
-                    "GUI frame=%u fps=%.2f average_fps=%.2f gpu_frame_ms=%.3f keys=%u gametic=%d "
-                    "x=%d y=%d angle=%d\n",
-                    self.frameSequence, fps, averageFPS, frameMS, keys, gametic, x, y, angle);
-          // Updating the title every frame needlessly redraws AppKit chrome.
-          if (!self.lastTitleUpdate || current - self.lastTitleUpdate >= 0.5) {
-            double titleFPS = self.lastTitleUpdate ? (self.frameSequence - self.lastTitleFrame) /
-                                                         (current - self.lastTitleUpdate)
-                                                   : fps;
-            self.window.title = [NSString
-                stringWithFormat:
-                    @"Metal Doom · %.1f FPS · GPU %.1f ms/frame · Esc quit",
-                    titleFPS, frameMS];
-            self.lastTitleUpdate = current;
-            self.lastTitleFrame = self.frameSequence;
-          }
+          int32_t state[16] = {};
+          state[0] = gametic; state[4] = x; state[5] = y; state[7] = angle;
+          [self displayFrame:frame state:state frameMS:frameMS keys:keys];
           [self scheduleNextFrame];
         });
       } catch (const std::exception &e) {
@@ -620,7 +709,7 @@ int main(int argc, char **argv) {
       NSString *shader = @"build/doom.metal", *wad = nil, *initial = @"build/initial-memory.bin",
                *output = @"build/results";
       bool headless = false, scripted = false, renderEveryTick = false, profile = false,
-           frameHashes = false, serialRender = false, batchFrames = true;
+           frameHashes = false, serialRender = false, batchFrames = true, persistent = false, dispatchMode = false, customShader = false;
       unsigned ticks = 350, samples = 12;
       for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
@@ -631,16 +720,21 @@ int main(int argc, char **argv) {
         };
         if (a == "--wad")
           wad = value();
-        else if (a == "--shader")
-          shader = value();
+        else if (a == "--shader") {
+          shader = value(); customShader = true;
+        }
         else if (a == "--initial-memory")
           initial = value();
         else if (a == "--output")
           output = value();
         else if (a == "--ticks")
-          ticks = std::stoul(value().UTF8String);
+          ticks = parseCount(value(), 0, 1000000, "--ticks");
         else if (a == "--samples")
-          samples = std::stoul(value().UTF8String);
+          samples = parseCount(value(), 1, 1000000, "--samples");
+        else if (a == "--persistent")
+          persistent = true;
+        else if (a == "--dispatch")
+          dispatchMode = true;
         else if (a == "--headless")
           headless = true;
         else if (a == "--profile") {
@@ -659,23 +753,29 @@ int main(int argc, char **argv) {
         else if (a == "--help") {
           puts("metal-doom --wad FILE [--headless --ticks N --scripted --render-every-tick "
                "--frame-hashes]\n"
-               "           [--profile --samples N] [--serial-render] [--no-batch] [--output DIR]\n"
+               "           [--persistent | --dispatch] [--profile --samples N] [--serial-render] [--no-batch] [--output DIR]\n"
                "           [--shader FILE --initial-memory FILE]\n"
                "--ticks: simulation ticks (default 350); --samples: samples per profile phase "
-               "(default 12)");
+               "(default 12)\n"
+               "GUI defaults to --persistent; headless/profile defaults to --dispatch.");
           return 0;
         } else
           throw std::runtime_error("Unknown option " + a);
       }
+      if (persistent && dispatchMode)
+        throw std::runtime_error("Choose --persistent or --dispatch");
+      if (persistent && (profile || !batchFrames))
+        throw std::runtime_error("--profile and --no-batch use the dispatch backend");
       if (!batchFrames && !headless)
         throw std::runtime_error("--no-batch requires --headless or --profile");
       if (serialRender && !headless)
         throw std::runtime_error("--serial-render requires --headless or --profile");
       if (frameHashes && (!headless || profile || !renderEveryTick))
         throw std::runtime_error("--frame-hashes requires --headless --render-every-tick");
+      if (!customShader && (persistent || (!headless && !dispatchMode))) shader = @"build/doom-persistent.metal";
       if (![[NSFileManager defaultManager] fileExistsAtPath:shader]) {
         NSString *candidate =
-            [[NSBundle mainBundle].resourcePath stringByAppendingPathComponent:@"doom.metal"];
+            [[NSBundle mainBundle].resourcePath stringByAppendingPathComponent:shader.lastPathComponent];
         if ([[NSFileManager defaultManager] fileExistsAtPath:candidate])
           shader = candidate;
       }
@@ -743,6 +843,9 @@ int main(int argc, char **argv) {
         putchar('\n');
         return 0;
       }
+      if (headless && persistent)
+        return persistentHeadless(shader, initial, wadData, output, ticks, scripted,
+                                  renderEveryTick, frameHashes, serialRender);
       if (headless) {
         Engine engine(shader);
         engine.control[14] = serialRender;
@@ -813,12 +916,14 @@ int main(int argc, char **argv) {
       delegate.shaderPath = shader;
       delegate.initialPath = initial;
       delegate.wadData = wadData;
+      delegate.usePersistent = !dispatchMode;
       [NSApp setDelegate:delegate];
       [NSApp run];
       if (delegate.worker)
         dispatch_sync(delegate.worker, ^{
                       });
       delete delegate.engine;
+      delete delegate.liveEngine;
       return 0;
     } catch (const std::exception &e) {
       fprintf(stderr, "metal-doom: %s\n", e.what());

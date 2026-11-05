@@ -182,7 +182,10 @@ def main():
     # in a persistent scheduler; the app loads the combined standalone source.
     (BUILD / 'initial-memory.bin').write_bytes(image)
     (BUILD / 'doom-engine.metal').write_text(engine)
+    protocol = (ROOT / 'app/persistent_protocol.h').read_text()
+    persistent = (ROOT / 'app/persistent.metal').read_text()
     (BUILD / 'doom.metal').write_text(engine + dispatch)
+    (BUILD / 'doom-persistent.metal').write_text(engine + protocol + persistent)
     metadata = {'memoryBytes': len(image), 'functions': len(functions),
                 'tableEntries': len(table), 'width': 320, 'height': 200}
     (BUILD / 'engine.json').write_text(json.dumps(metadata, indent=2) + '\n')

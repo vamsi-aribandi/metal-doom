@@ -1,3 +1,48 @@
+# Persistent execution: 2026-11-05
+
+The M4 hardware and toolchain were rechecked. The native app now initializes and
+runs Doom inside one continuously running Metal dispatch, with live keyboard
+input and acknowledged framebuffer snapshots. The engine API remains unchanged.
+
+`./test.sh --wad /external/path/doom1.wad` passes both backends, including
+initialization, idle, scripted 350-tick and rendered 350-tick cases. Persistent
+headless replay uses exactly one submission and one dispatch, including asset
+copy and initialization. [Regression report](results/persistent-regression.json).
+
+The dedicated persistent tests compare 421 rendered frames at one tick per frame
+and 54 frames with eight-tick batches against original C. Every hash and all 16
+diagnostics match; each frame is received before the single command completes.
+The same suite's 60-second realtime test changes turning/fire input and captures
+2,100 frames at 34.97 FPS. Replaying its actual observed tick/key/render schedule
+in independent C matches every frame and 33,600 diagnostic values. Holding the
+last snapshot without acknowledgement preserves its pixels; requesting stop
+from that waiting state completes in 0.152 ms. Across these three tests, 2,575
+frame hashes and 41,200 diagnostics match. [Sustained report](results/persistent-report.json).
+
+A native-window run delivered 4,026 frames at an average 35.01 FPS, accepted turning
+and firing (ammo 50→49), then quit with command status 4 and one total dispatch.
+The window deliberately paces gameplay to 35 Hz. A successful run establishes
+this tested duration, not indefinite operation on all Macs.
+
+Three warmed 350-frame scripted benchmarks gave median wall throughput of
+105.95 FPS for persistent replay and 102.75 FPS for ordered dispatch. Every tick
+trace and final framebuffer matched. Persistent replay uses one submission and
+dispatch; ordered dispatch uses 353 submissions and 711 dispatches. The small
+speed difference does not change the serial gameplay/scene-traversal bottleneck.
+The timings include frame handoff and exclude shader compilation/initialization.
+[Benchmark report](results/persistent-benchmark.json).
+
+A fresh source copy built successfully and its persistent replay matched the
+CPU for 350 ticks, 351 frame hashes and all 256,000 final framebuffer bytes.
+The generated shader and memory image remain a matched pair from that build.
+Quitting during initialization and normal play both completed cleanup. Invalid
+negative, overflowing and nonnumeric tick counts are rejected before launch.
+
+Live mid-dispatch memory exchange depends on undocumented system-coherent Metal
+compiler features. The public-API `--dispatch` backend is retained in a separate
+shader. See [persistent execution](persistent.md) for the protocol, limitations,
+reproduction commands, and work remaining before combined ML integration.
+
 # Validation on 2026-11-04
 
 Tested on the actual Apple M4 Mac mini: 10 CPU cores, 10 GPU cores, 16 GB unified

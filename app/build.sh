@@ -12,9 +12,11 @@ cat > "build/Metal Doom.app/Contents/Info.plist" <<'PLIST'
 PLIST
 
 mkdir -p "build/Metal Doom.app/Contents/Resources"
-for asset in doom.metal initial-memory.bin; do
+for asset in doom.metal doom-persistent.metal initial-memory.bin; do
   if [[ -f "build/$asset" ]]; then cp "build/$asset" "build/Metal Doom.app/Contents/Resources/$asset"; fi
 done
 cp LICENSE CREDITS.md "build/Metal Doom.app/Contents/Resources/"
 cp vendor/PROVENANCE.md "build/Metal Doom.app/Contents/Resources/PROVENANCE.md"
 cp vendor/tinylibc/LICENSE "build/Metal Doom.app/Contents/Resources/tinylibc-LICENSE"
+
+cp vendor/licenses/*.txt "build/Metal Doom.app/Contents/Resources/"
