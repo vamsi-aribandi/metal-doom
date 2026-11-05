@@ -1,80 +1,106 @@
 # metal-doom
 
-The actual Doom engine running on an Apple Silicon GPU through Metal, with a
-native Mac app. Gameplay, the original software renderer, and palette conversion
-execute on the GPU. The CPU loads assets, collects keyboard input, and presents
-completed frames. Starts in E1M1, skill 3, at 320×200; sound can wait.
+A Doom port for Apple Silicon Macs. The Doom engine runs on the GPU using
+Metal, with a native Mac app for keyboard input and display. Based on
+[doomgeneric](https://github.com/ozkl/doomgeneric).
 
-On the tested M4 Mac mini, the 350-frame gameplay benchmark runs at **about
-104 FPS**. Three-run A/B medians were 96.9 FPS with separate submissions and
-103.7 FPS with one submission per frame. The window follows Doom's 35 Hz game
-clock. All 351 gameplay frames plus 421 renderer-state frames match the
-independent CPU reference. See [measurements and tests](docs/validation.md).
+## Requirements
 
-## Build and run
+- An Apple Silicon Mac.
+- Apple's Command Line Tools (`xcode-select --install`).
+- Python 3 and Homebrew.
+- LLVM, LLD, and WABT, installed with the command below.
+- A Doom IWAD file. The port is tested with Doom shareware 1.9 (`doom1.wad`).
 
-Requires Apple Silicon, macOS, Apple's Command Line Tools, Python 3, and the
-engine build tools below. Tested on M4, 16 GB, macOS 26.5.1. Full Xcode and the
-offline `metal` executable are unnecessary: the app compiles Metal at launch.
+Tested on an M4 Mac mini running macOS 26.5.1. Full Xcode is not required;
+Metal shaders are compiled by the app at launch.
+
+Game assets are not included or downloaded by the build scripts.
+
+## Build
 
 ```sh
 git clone https://github.com/vamsi-aribandi/metal-doom.git
 cd metal-doom
 brew install llvm lld wabt
 ./build.sh
-./run.sh --wad /absolute/path/to/doom1.wad
 ```
 
-Install Command Line Tools with `xcode-select --install` if absent. Alternatively
-open `build/Metal Doom.app` and choose an IWAD. The app bundles its engine program
-and can be moved away from the checkout. First launch may spend tens of seconds
-compiling; the loading window remains responsive.
+This builds the executable and `build/Metal Doom.app`.
 
-**No game assets are bundled or downloaded.** Doom shareware 1.9 is the tested
-IWAD (MD5 `f0cefca49926d00903cf57551d901abe`). Doom/Ultimate Doom compatible IWADs
-use E1M1; Doom II and Freedoom Phase 2 are not this milestone's startup target.
-
-Controls: W/S or Up/Down move; A/D or Left/Right turn; Q/E strafe; Space fires;
-Enter uses doors/switches; Shift runs; 1–7 choose weapons; Tab opens automap;
-M opens the original menu; Z is menu Enter; Escape quits.
-
-## Test and profile
+## Run
 
 ```sh
-./test.sh --wad /absolute/path/to/doom1.wad
-./run.sh --wad /absolute/path/to/doom1.wad --headless --scripted \
-  --ticks 350 --render-every-tick --output build/benchmark
-./run.sh --wad /absolute/path/to/doom1.wad --profile --samples 12 \
-  --output build/profile
+./run.sh --wad /path/to/doom1.wad
 ```
 
-Tests compare original ARM64 C against GPU state, every captured frame's SHA256,
-and every final framebuffer byte. Compiler restructuring also has independent
-randomized differential tests. Profiling isolates world rendering, palette
-conversion, and full-frame GPU time. [Methodology](docs/performance.md).
+You can also open `build/Metal Doom.app` and select an IWAD in the file picker.
+The app bundles the engine and shaders, so it can be moved out of the checkout.
+The first launch can take tens of seconds while Metal compiles the shaders.
 
-## Reusable GPU engine
+The game starts in E1M1 at skill 3 and renders at 320×200. Gameplay runs at
+Doom's original 35 ticks per second, with the window drawing at the same rate.
+Doom II and Freedoom Phase 2 are not supported.
+Audio, saved games, and configuration persistence are not implemented.
 
-The source translation is C → freestanding wasm32 → typed C → native Metal.
-WebAssembly is an intermediate representation, not a runtime interpreter. Hot
-control flow becomes native loops and branches, with a conservative fallback.
-Doom's gameplay and scene traversal run on the owner lane. Opaque columns and
-spans draw across one SIMD group, preserving fixed-point sampling and draw order.
-Sprites, special effects, and UI retain their original serial drawing. Palette
-expansion uses that same SIMD group in the same render call and dispatch.
+### Controls
 
-`build/doom-engine.metal` contains the reusable device functions and explicit
-`DoomState`, without a kernel entrypoint. `app/dispatch.metal` supplies the
-standalone launch adapter. Initialization/rendering use only SIMD-group barriers;
-there are no CPU callbacks or mandatory separate engine launches.
+| Key | Action |
+| --- | --- |
+| W / S or Up / Down | Move forward / backward |
+| A / D or Left / Right | Turn |
+| Q / E | Strafe |
+| Space | Fire |
+| Enter | Use doors and switches |
+| Shift | Run |
+| 1–7 | Select weapon |
+| Tab | Toggle automap |
+| M | Open or close the game menu |
+| Z | Select a menu item |
+| Escape | Quit the app |
 
-See [architecture and remaining megakernel work](docs/architecture.md),
-[engine ABI](engine/API.md), [credits](CREDITS.md), and
-[source provenance](vendor/PROVENANCE.md). Combined training/inference scheduling
-has not been tested. Only opaque pixel drawing is parallel; scene traversal
-and sprites remain serial. Further optimization should follow measurements.
-Audio and save/config persistence are unavailable;
-long sessions, full levels, and other maps need broader testing.
+## How it works
 
-GPL-2.0-or-later, with retained MIT third-party components. Proprietary WADs and
-game graphics are excluded from source control and app archives.
+The build compiles DoomGeneric's C engine to WebAssembly, converts it to typed
+C with `wasm2c`, then generates Metal source. The app compiles that source into
+native GPU functions at launch.
+
+Game logic and rendering execute on the GPU. One GPU thread handles gameplay
+and scene traversal. Opaque surfaces and palette conversion run across 32
+threads. Sprites, special effects, and low-detail rendering use the original
+serial drawing code.
+The CPU loads the IWAD, collects input, and displays completed frames. The app
+submits input, game ticks, and rendering together in one Metal command buffer
+per frame.
+
+The engine and app are separate:
+
+- `engine/` contains the platform adapter, GPU state, and initialization, tick,
+  and rendering functions.
+- `tools/` translates the compiled engine into Metal.
+- `app/` contains the native window, input handling, and standalone dispatch
+  kernel.
+- `vendor/` contains the upstream engine and minimal C library.
+
+The generated `build/doom-engine.metal` can be embedded in another Metal
+kernel. Integration with training and inference workloads has not been tested.
+See [architecture](docs/architecture.md) and the [engine API](engine/API.md)
+for details.
+
+## Tests
+
+After building, run the CPU/GPU comparisons with the same IWAD:
+
+```sh
+./test.sh --wad /path/to/doom1.wad
+```
+
+The tests compare game state and rendered frames against a native CPU build
+of the engine. See [test instructions](tests/README.md),
+[profiling instructions](docs/performance.md), and
+[validation results](docs/validation.md).
+
+## License
+
+GPL-2.0-or-later, with MIT-licensed components. See [LICENSE](LICENSE),
+[credits](CREDITS.md), and [source provenance](vendor/PROVENANCE.md).
