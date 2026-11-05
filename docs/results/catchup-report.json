@@ -1,0 +1,32 @@
+{
+  "passed": true,
+  "cpu_only": false,
+  "ticks": 420,
+  "ticks_per_frame": 8,
+  "frames_compared": 54,
+  "diagnostic_values_compared": 864,
+  "submission_stats": {
+    "submissions": 56,
+    "dispatches": 524,
+    "initial_submissions": 3,
+    "initial_dispatches": 3,
+    "rendered_batches": 53,
+    "ticks_per_frame": 8
+  },
+  "coverage_sampling": "first rendered tick at or after each checkpoint",
+  "coverage": {
+    "low_detail": true,
+    "reduced_viewport": true,
+    "restored_viewport": true,
+    "automap": true,
+    "menu": true,
+    "pause": true,
+    "full_screen": true,
+    "gamma": true,
+    "movement": true,
+    "turning": true,
+    "firing_input": true
+  },
+  "final_frame_sha256": "132a7f9da9c6d98c01e22735d34c795bcf6bf55404460142ae4132f9b998f54d",
+  "wad_sha256": "1d7d43be501e67d927e415e0b8f3e29c3bf33075e859721816f652a526cac771"
+}

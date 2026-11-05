@@ -84,3 +84,21 @@ The second command builds a temporary source copy with
 fixed queue ABI. It compares 36 frame hashes, every tick diagnostic and every
 final framebuffer byte, then removes the temporary source/build. Run the normal
 build/reference tests first. These tests do not bundle assets.
+
+## Batched frames
+
+The normal suite also checks eight ticks per rendered frame, including the final
+partial batch, against the CPU with the same render schedule. The renderer
+fixture records GPU submissions/dispatches and asserts one submission per frame.
+The gameplay case checks the actual native `Engine.frame` path uses 353
+submissions for its 350 frames, including initialization.
+
+```sh
+python3 tests/test_render_states.py --wad /absolute/path/to/doom1.wad \
+  --ticks-per-frame 8 --output build/catchup-test
+python3 tests/benchmark_overhead.py --wad /absolute/path/to/doom1.wad
+```
+
+The benchmark compares output hashes before reporting timing and excludes
+shader compilation, initialization and warmups. It keeps the discarded inline
+experiment in its test shader only; normal engine generation is unchanged.

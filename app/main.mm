@@ -95,8 +95,10 @@ public:
   id<MTLBuffer> memory, mailbox, instance;
   uint32_t *control;
   uint32_t previousKeys = 0;
-  double gpuMS = 0, tickGpuMS = 0, renderGpuMS = 0;
-  unsigned dispatches = 0, renderCount = 0;
+  double gpuMS = 0, tickGpuMS = 0, renderGpuMS = 0, frameGpuMS = 0;
+  unsigned dispatches = 0, submissions = 0, renderCount = 0, batchedFrames = 0;
+  bool batchFrames = true;
+  struct Operation { uint32_t code, a = 0, b = 0; };
   NSUInteger workers = 32;
   Engine(NSString *shader) {
     device = MTLCreateSystemDefaultDevice();
@@ -141,35 +143,43 @@ public:
     fprintf(stderr, "Metal device: %s; SIMD width %lu\n", device.name.UTF8String,
             (unsigned long)pipeline.threadExecutionWidth);
   }
-  uint32_t invoke(uint32_t operation, uint32_t a = 0, uint32_t b = 0) {
-    control[0] = operation;
-    control[1] = a;
-    control[2] = b;
+  void submit(const std::vector<Operation> &operations) {
+    if (operations.empty()) return;
     control[13] = 0;
     id<MTLCommandBuffer> cb = [queue commandBuffer];
-    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
-    [enc setComputePipelineState:pipeline];
-    [enc setBuffer:memory offset:0 atIndex:0];
-    [enc setBuffer:mailbox offset:0 atIndex:1];
-    [enc setBuffer:instance offset:0 atIndex:2];
-    [enc dispatchThreads:MTLSizeMake(workers, 1, 1)
-        threadsPerThreadgroup:MTLSizeMake(workers, 1, 1)];
-    [enc endEncoding];
+    for (const Operation &operation : operations) {
+      // Separate serial encoders keep tracked-resource dependencies explicit.
+      // setBytes snapshots each operation; shared mailbox contents are outputs.
+      id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+      [enc setComputePipelineState:pipeline];
+      [enc setBuffer:memory offset:0 atIndex:0];
+      [enc setBuffer:mailbox offset:0 atIndex:1];
+      [enc setBuffer:instance offset:0 atIndex:2];
+      [enc setBytes:&operation length:sizeof(operation) atIndex:3];
+      [enc dispatchThreads:MTLSizeMake(workers, 1, 1)
+          threadsPerThreadgroup:MTLSizeMake(workers, 1, 1)];
+      [enc endEncoding];
+    }
     [cb commit];
     [cb waitUntilCompleted];
     if (cb.status != MTLCommandBufferStatusCompleted)
       throw std::runtime_error(boundedError(cb.error));
     double elapsed = (cb.GPUEndTime - cb.GPUStartTime) * 1000;
     gpuMS += elapsed;
-    if (operation == 1)
+    ++submissions;
+    dispatches += operations.size();
+    if (operations.size() == 1 && operations[0].code == 1)
       tickGpuMS += elapsed;
-    if (operation == 2) {
-      renderGpuMS += elapsed;
+    if (operations.back().code == 2) {
       ++renderCount;
+      if (operations.size() == 1) renderGpuMS += elapsed;
+      else { frameGpuMS += elapsed; ++batchedFrames; }
     }
-    ++dispatches;
     if (control[13])
       throw std::runtime_error("GPU engine trap " + std::to_string(control[13]));
+  }
+  uint32_t invoke(uint32_t operation, uint32_t a = 0, uint32_t b = 0) {
+    submit({{operation, a, b}});
     return control[8];
   }
   void load(NSData *d, NSString *initial) {
@@ -189,15 +199,33 @@ public:
     if (result)
       throw std::runtime_error("Doom initialization failed: " + std::to_string(result));
   }
-  void step(uint32_t keys) {
+  void appendInput(std::vector<Operation> &operations, uint32_t keys) {
     static const uint32_t keyCodes[] = {0xad, 0xaf, 0xac, 0xae, 0xa0, 0xa1, 0xa3, 0xa2, 13, 0xb6,
                                         49,   50,   51,   52,   53,   54,   55,   9,    27};
     uint32_t changed = keys ^ previousKeys;
     for (unsigned bit = 0; bit < 19; ++bit)
       if (changed & (1u << bit))
-        invoke(4, (keys >> bit) & 1, keyCodes[bit]);
+        operations.push_back({4, (keys >> bit) & 1, keyCodes[bit]});
     previousKeys = keys;
+  }
+  void step(uint32_t keys) {
+    std::vector<Operation> operations;
+    appendInput(operations, keys);
+    for (const Operation &operation : operations) invoke(operation.code, operation.a, operation.b);
     invoke(1);
+  }
+  const uint8_t *frame(uint32_t keys, unsigned ticks = 1) {
+    if (!batchFrames) {
+      for (unsigned i = 0; i < ticks; ++i) step(keys);
+      return pixels();
+    }
+    std::vector<Operation> operations;
+    operations.reserve(19 + ticks + 1);
+    appendInput(operations, keys);
+    for (unsigned i = 0; i < ticks; ++i) operations.push_back({1});
+    operations.push_back({2});
+    submit(operations);
+    return currentPixels();
   }
   const int32_t *diagnostics() {
     if (uint64_t(control[10]) + 64 > memory.length)
@@ -518,12 +546,9 @@ public:
   dispatch_async(self.worker, ^{
     @autoreleasepool {
       try {
-        double tickStart = engine->tickGpuMS;
-        for (unsigned i = 0; i < count; ++i)
-          engine->step(keys);
-        double ticksMS = engine->tickGpuMS - tickStart, renderStart = engine->renderGpuMS;
-        const uint8_t *pixels = engine->pixels();
-        double renderMS = engine->renderGpuMS - renderStart;
+        double frameStart = engine->gpuMS;
+        const uint8_t *pixels = engine->frame(keys, count);
+        double frameMS = engine->gpuMS - frameStart;
         NSData *frame = [NSData dataWithBytes:pixels length:Width * Height * 4];
         int32_t gametic = engine->diagnostics()[0], x = engine->diagnostics()[4],
                 y = engine->diagnostics()[5], angle = engine->diagnostics()[7];
@@ -562,9 +587,9 @@ public:
               self.frameSequence > 1 ? (self.frameSequence - 1) / (current - self.firstDisplay) : 0;
           if (self.frameSequence == 1 || self.frameSequence % 35 == 0)
             fprintf(stderr,
-                    "GUI frame=%u fps=%.2f average_fps=%.2f gpu_render_ms=%.3f keys=%u gametic=%d "
+                    "GUI frame=%u fps=%.2f average_fps=%.2f gpu_frame_ms=%.3f keys=%u gametic=%d "
                     "x=%d y=%d angle=%d\n",
-                    self.frameSequence, fps, averageFPS, renderMS, keys, gametic, x, y, angle);
+                    self.frameSequence, fps, averageFPS, frameMS, keys, gametic, x, y, angle);
           // Updating the title every frame needlessly redraws AppKit chrome.
           if (!self.lastTitleUpdate || current - self.lastTitleUpdate >= 0.5) {
             double titleFPS = self.lastTitleUpdate ? (self.frameSequence - self.lastTitleFrame) /
@@ -572,8 +597,8 @@ public:
                                                    : fps;
             self.window.title = [NSString
                 stringWithFormat:
-                    @"Metal Doom · %.1f FPS · GPU %.1f ms/frame · %.2f ms/tick · Esc quit",
-                    titleFPS, renderMS, ticksMS / count];
+                    @"Metal Doom · %.1f FPS · GPU %.1f ms/frame · Esc quit",
+                    titleFPS, frameMS];
             self.lastTitleUpdate = current;
             self.lastTitleFrame = self.frameSequence;
           }
@@ -595,7 +620,7 @@ int main(int argc, char **argv) {
       NSString *shader = @"build/doom.metal", *wad = nil, *initial = @"build/initial-memory.bin",
                *output = @"build/results";
       bool headless = false, scripted = false, renderEveryTick = false, profile = false,
-           frameHashes = false, serialRender = false;
+           frameHashes = false, serialRender = false, batchFrames = true;
       unsigned ticks = 350, samples = 12;
       for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
@@ -625,6 +650,8 @@ int main(int argc, char **argv) {
           scripted = true;
         else if (a == "--render-every-tick")
           renderEveryTick = true;
+        else if (a == "--no-batch")
+          batchFrames = false;
         else if (a == "--serial-render")
           serialRender = true;
         else if (a == "--frame-hashes")
@@ -632,7 +659,7 @@ int main(int argc, char **argv) {
         else if (a == "--help") {
           puts("metal-doom --wad FILE [--headless --ticks N --scripted --render-every-tick "
                "--frame-hashes]\n"
-               "           [--profile --samples N] [--serial-render] [--output DIR]\n"
+               "           [--profile --samples N] [--serial-render] [--no-batch] [--output DIR]\n"
                "           [--shader FILE --initial-memory FILE]\n"
                "--ticks: simulation ticks (default 350); --samples: samples per profile phase "
                "(default 12)");
@@ -640,6 +667,8 @@ int main(int argc, char **argv) {
         } else
           throw std::runtime_error("Unknown option " + a);
       }
+      if (!batchFrames && !headless)
+        throw std::runtime_error("--no-batch requires --headless or --profile");
       if (serialRender && !headless)
         throw std::runtime_error("--serial-render requires --headless or --profile");
       if (frameHashes && (!headless || profile || !renderEveryTick))
@@ -665,6 +694,7 @@ int main(int argc, char **argv) {
       if (profile) {
         Engine engine(shader);
         engine.control[14] = serialRender;
+        engine.batchFrames = batchFrames;
         engine.load(wadData, initial);
         // Profile repeated rendering of the same initialized game state; no simulation runs here.
         // Each measured command is isolated, and GPU timestamps exclude host-side waiting.
@@ -716,6 +746,7 @@ int main(int argc, char **argv) {
       if (headless) {
         Engine engine(shader);
         engine.control[14] = serialRender;
+        engine.batchFrames = batchFrames;
         engine.load(wadData, initial);
         [[NSFileManager defaultManager] createDirectoryAtPath:output
                                   withIntermediateDirectories:YES
@@ -732,18 +763,18 @@ int main(int argc, char **argv) {
         std::ostringstream trace;
         trace << "tick,hash,gametic,gamestate,health,armor,x,y,z,angle,kills,items,secrets,"
                  "rndindex,prndindex,leveltime,weapon,exited\n";
+        double loopGPUStart = engine.gpuMS;
         auto start = std::chrono::steady_clock::now();
         const uint8_t *p = nullptr;
         for (unsigned i = 0; i < ticks; ++i) {
           uint32_t keys = scripted ? ((i < 140 ? 1u : 0u) | (i >= 140 && i < 210 ? 8u : 0u) |
                                       (i >= 210 && i < 280 ? 64u : 0u) | (i == 280 ? 128u : 0u))
                                    : 0;
-          engine.step(keys);
           if (renderEveryTick) {
-            p = engine.pixels();
+            p = engine.frame(keys);
             if (frameHashes)
               frameTrace << i + 1 << "," << sha256(p, Width * Height * 4) << "\n";
-          }
+          } else engine.step(keys);
           trace << i + 1 << "," << engine.stateHash();
           for (unsigned j = 0; j < 16; ++j)
             trace << "," << engine.diagnostics()[j];
@@ -760,15 +791,17 @@ int main(int argc, char **argv) {
         }
         std::string csv = trace.str();
         writeBytes([output stringByAppendingPathComponent:@"ticks.csv"], csv.data(), csv.size());
+        NSString *tickTime = engine.batchedFrames ? @"null" : [NSString stringWithFormat:@"%.6f", engine.tickGpuMS];
+        NSString *renderTime = engine.batchedFrames ? @"null" : [NSString stringWithFormat:@"%.6f", engine.renderGpuMS];
         NSString *summary = [NSString
             stringWithFormat:
                 @"{\"device\":\"%@\",\"ticks\":%u,\"seconds\":%.9f,\"gpu_ms\":%.6f,\"dispatches\":%"
-                @"u,\"state_hash\":%u,\"width\":%u,\"height\":%u,\"tick_gpu_ms\":%.6f,\"render_gpu_"
-                @"ms\":%.6f,\"frames\":%u,\"wall_fps\":%.6f,\"render_every_tick\":%@,\"serial_render\":%@}\n",
+                @"u,\"state_hash\":%u,\"width\":%u,\"height\":%u,\"tick_gpu_ms\":%@,\"render_gpu_"
+                @"ms\":%@,\"frames\":%u,\"wall_fps\":%.6f,\"render_every_tick\":%@,\"serial_render\":%@,\"batch_frames\":%@,\"submissions\":%u,\"batched_frame_gpu_ms\":%.6f,\"loop_gpu_ms\":%.6f}\n",
                 engine.device.name, ticks, seconds, engine.gpuMS, engine.dispatches,
-                engine.stateHash(), Width, Height, engine.tickGpuMS, engine.renderGpuMS,
+                engine.stateHash(), Width, Height, tickTime, renderTime,
                 engine.renderCount, engine.renderCount / seconds,
-                renderEveryTick ? @"true" : @"false", serialRender ? @"true" : @"false"];
+                renderEveryTick ? @"true" : @"false", serialRender ? @"true" : @"false", batchFrames ? @"true" : @"false", engine.submissions, engine.frameGpuMS, engine.gpuMS - loopGPUStart];
         writeBytes([output stringByAppendingPathComponent:@"summary.json"], summary.UTF8String,
                    strlen(summary.UTF8String));
         printf("%s", summary.UTF8String);

@@ -2,8 +2,18 @@
   "passed": true,
   "cpu_only": false,
   "ticks": 420,
+  "ticks_per_frame": 1,
   "frames_compared": 421,
   "diagnostic_values_compared": 6736,
+  "submission_stats": {
+    "submissions": 423,
+    "dispatches": 891,
+    "initial_submissions": 3,
+    "initial_dispatches": 3,
+    "rendered_batches": 420,
+    "ticks_per_frame": 1
+  },
+  "coverage_sampling": "first rendered tick at or after each checkpoint",
   "coverage": {
     "low_detail": true,
     "reduced_viewport": true,

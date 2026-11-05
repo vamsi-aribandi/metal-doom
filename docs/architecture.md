@@ -68,8 +68,13 @@ functions with the same state and arguments. Tick, input, and allocation have
 one owner, lane zero. Only SIMD-group device-memory barriers are used; no full
 threadgroup barrier constrains independent workloads.
 
-The standalone uses repeated dispatches and public command-completion
-synchronization. That scheduling belongs to the host, not the engine. A
+The standalone puts input, ticks and rendering into one command buffer per
+frame and waits once. Dispatches remain separate, with serial encoders and
+tracked resource dependencies. Each operation's arguments are copied with
+`setBytes` at buffer index 3; the shared mailbox is reserved for outputs and
+render-mode configuration, avoiding overwritten arguments within a batch.
+The app supports up to eight catch-up ticks before a render. That scheduling
+belongs to the host, not the engine. A
 persistent caller can preload assets and invoke binding, initialization, ticks,
 and rendering from its own kernel without a CPU handshake between calls.
 See [engine details](../engine/API.md) for the translated frontend's offsets and

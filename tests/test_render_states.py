@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare every frame and tick across original C and staged GPU rendering.
+"""Compare rendered frames and diagnostics across original C and GPU rendering.
 
 Exercises low detail, viewport changes, automap, menus, pause, palette gamma,
 and normal movement/firing. The event file is shared by both implementations.
@@ -51,7 +51,7 @@ def schedule():
     return sorted(events, key=lambda event: event[0])
 
 
-def cpu_reference(wad_path, library, events, output):
+def cpu_reference(wad_path, library, events, output, ticks_per_frame=1):
     # This library is original C, independently built without the draw hooks.
     engine = ctypes.CDLL(str(library.resolve()))
     engine.engine_alloc.argtypes = [ctypes.c_uint32]
@@ -69,16 +69,18 @@ def cpu_reference(wad_path, library, events, output):
     ctypes.memmove(pointer, wad, len(wad))
     if engine.engine_init(pointer, len(wad)):
         raise RuntimeError(f'CPU initialization failed: {engine.engine_log()!r}')
-    globals_by_tick, rows = {}, []
-    def capture(tick):
+    globals_by_tick, states_by_tick, rows = {}, {}, []
+    def capture(tick, rendered):
         state = list(engine.engine_diagnostics()[:16])
         if state[0] != tick + 1 or state[15]:
             raise AssertionError(f'Invalid CPU tick progression at {tick}: {state}')
-        pixels = ctypes.string_at(engine.engine_framebuffer(), 320 * 200 * 4)
-        rows.append([str(tick), hashlib.sha256(pixels).hexdigest(), *map(str, state)])
+        states_by_tick[tick] = state
+        if rendered:
+            pixels = ctypes.string_at(engine.engine_framebuffer(), 320 * 200 * 4)
+            rows.append([str(tick), hashlib.sha256(pixels).hexdigest(), *map(str, state)])
         globals_by_tick[tick] = {
             name: ctypes.c_int.in_dll(engine, name).value for name in RENDER_GLOBALS}
-    capture(0)
+    capture(0, True)
     next_event = 0
     for tick in range(1, TICKS + 1):
         while next_event < len(events) and events[next_event][0] == tick:
@@ -86,8 +88,10 @@ def cpu_reference(wad_path, library, events, output):
             engine.engine_key(pressed, key)
             next_event += 1
         engine.engine_tick()
-        engine.engine_render()
-        capture(tick)
+        rendered = tick % ticks_per_frame == 0 or tick == TICKS
+        if rendered:
+            engine.engine_render()
+        capture(tick, rendered)
     with output.open('w', newline='') as stream:
         writer = csv.writer(stream, lineterminator='\n')
         writer.writerow(HEADER)
@@ -96,7 +100,13 @@ def cpu_reference(wad_path, library, events, output):
     # Prove that events actually exercised these code paths, rather than merely
     # comparing two engines that ignored the same key input. Firing input is
     # recorded separately; its visible ammo decrement is checked in native UI.
-    at = globals_by_tick.__getitem__
+    # Some view globals update during rendering. Inspect the first rendered
+    # state at or after each checkpoint, within the same stable input interval.
+    # Retain globals and diagnostics for every tick even in catch-up batches.
+    def at(tick):
+        rendered_tick = min(TICKS, ((tick + ticks_per_frame - 1) // ticks_per_frame)
+                            * ticks_per_frame)
+        return globals_by_tick[rendered_tick]
     checks = {
         'low_detail': at(150)['detailshift'] == 1 and at(185)['detailshift'] == 0,
         'reduced_viewport': at(210)['scaledviewwidth'] < at(0)['scaledviewwidth'],
@@ -106,8 +116,8 @@ def cpu_reference(wad_path, library, events, output):
         'pause': at(320)['paused'] != 0 and at(340)['paused'] == 0,
         'full_screen': at(360)['viewheight'] == 200 and at(380)['viewheight'] < 200,
         'gamma': at(395)['usegamma'] != at(0)['usegamma'],
-        'movement': rows[50][6:8] != rows[0][6:8],
-        'turning': rows[100][9] != rows[60][9],
+        'movement': states_by_tick[50][4:6] != states_by_tick[0][4:6],
+        'turning': states_by_tick[100][7] != states_by_tick[60][7],
         'firing_input': any(pressed and key == 0xa3 for _, pressed, key in events),
     }
     if not all(checks.values()):
@@ -124,12 +134,16 @@ def main():
     parser.add_argument('--output', type=Path, default=ROOT / 'build/tests/render-states')
     parser.add_argument('--cpu-only', action='store_true')
     parser.add_argument('--serial-render', action='store_true')
+    parser.add_argument('--ticks-per-frame', type=int, choices=range(1, 9), default=1,
+                        help='Ticks per submitted frame; exercises catch-up batching')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     events = schedule()
     event_path = args.output / 'events.txt'
     event_path.write_text(''.join(f'{tick} {pressed} {key}\n' for tick, pressed, key in events))
-    expected, coverage = cpu_reference(args.wad, args.library, events, args.output / 'cpu.csv')
+    expected, coverage = cpu_reference(args.wad, args.library, events, args.output / 'cpu.csv',
+                                       args.ticks_per_frame)
+    submission_stats = None
     if not args.cpu_only:
         binary = ROOT / 'build/render-states'
         subprocess.run(['xcrun', 'clang++', '-O2', '-std=c++17', '-fobjc-arc',
@@ -137,10 +151,20 @@ def main():
                         str(ROOT / 'tests/render_states.mm'), '-o', str(binary)], check=True)
         command = [str(binary), str(args.wad.resolve()), str(args.shader.resolve()),
                    str(args.initial_memory.resolve()), str(event_path.resolve()), str(TICKS),
-                   str((args.output / 'gpu.csv').resolve())]
+                   str((args.output / 'gpu.csv').resolve()), '--ticks-per-frame',
+                   str(args.ticks_per_frame)]
         if args.serial_render:
             command.append('--serial-render')
         subprocess.run(command, check=True)
+        submission_stats = json.loads((args.output / 'gpu.stats.json').read_text())
+        batches = len(expected) - 1
+        expected_stats = {'initial_submissions': 3, 'initial_dispatches': 3,
+                          'submissions': 3 + batches,
+                          'dispatches': 3 + len(events) + TICKS + batches,
+                          'rendered_batches': batches, 'ticks_per_frame': args.ticks_per_frame}
+        if submission_stats != expected_stats:
+            raise AssertionError(f'Unexpected GPU submission counts: '
+                                 f'{submission_stats} vs {expected_stats}')
         with (args.output / 'gpu.csv').open(newline='') as stream:
             reader = csv.reader(stream)
             if next(reader) != HEADER:
@@ -154,8 +178,11 @@ def main():
                                for name, a, b in zip(HEADER, want, got) if a != b}
                 raise AssertionError(f'First divergence at tick {want[0]}: {differences}')
     report = {'passed': True, 'cpu_only': args.cpu_only, 'ticks': TICKS,
-              'frames_compared': 0 if args.cpu_only else TICKS + 1,
-              'diagnostic_values_compared': 0 if args.cpu_only else (TICKS + 1) * 16,
+              'ticks_per_frame': args.ticks_per_frame,
+              'frames_compared': 0 if args.cpu_only else len(expected),
+              'diagnostic_values_compared': 0 if args.cpu_only else len(expected) * 16,
+              'submission_stats': submission_stats,
+              'coverage_sampling': 'first rendered tick at or after each checkpoint',
               'coverage': coverage, 'final_frame_sha256': expected[-1][1],
               'wad_sha256': hashlib.sha256(args.wad.read_bytes()).hexdigest()}
     (args.output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')

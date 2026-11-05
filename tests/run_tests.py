@@ -60,6 +60,12 @@ def main():
                 command.extend(['--render-every-tick', '--frame-hashes'])
             run(command)
             result['gpu_vs_original_c'] = compare(reference, gpu)
+            if name == 'rendered':
+                metrics = json.loads((gpu / 'summary.json').read_text())
+                if metrics['submissions'] != ticks + 3 or not metrics['batch_frames']:
+                    raise AssertionError(f'Rendered frame was not submitted as one batch: {metrics}')
+                result['submissions'] = metrics['submissions']
+                result['dispatches'] = metrics['dispatches']
             if name == 'scripted':
                 gpu_repeat = args.output / (name + '-gpu-repeat')
                 repeat_command = [args.binary, '--wad', args.wad, '--headless', '--ticks', ticks, '--output', gpu_repeat, '--scripted']
@@ -72,9 +78,16 @@ def main():
     if args.cpu_only:
         renderer_command.append('--cpu-only')
     run(renderer_command)
+    catchup_output = args.output / 'catchup'
+    catchup_command = [sys.executable, ROOT / 'tests/test_render_states.py',
+                       '--wad', args.wad, '--output', catchup_output, '--ticks-per-frame', '8']
+    if args.cpu_only:
+        catchup_command.append('--cpu-only')
+    run(catchup_command)
     report = {'passed': True, 'cpu_only': args.cpu_only, 'wad_sha256': wad_sha,
               'cases': results,
-              'renderer_states': json.loads((renderer_output / 'report.json').read_text())}
+              'renderer_states': json.loads((renderer_output / 'report.json').read_text()),
+              'catchup': json.loads((catchup_output / 'report.json').read_text())}
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))

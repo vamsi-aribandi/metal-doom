@@ -39,6 +39,14 @@ values**, exercising low/high detail, reduced/restored/full viewport, automap,
 menus, pause/resume, gamma, movement, turning and fire input.
 [Renderer-state report](results/renderer-states.json).
 
+
+Batched submission checks also pass with **eight ticks per render**, including
+its final partial batch: 54 captured frames and 864 diagnostic values match the
+CPU under the same schedule. There are 53 rendered batches plus three setup
+submissions. The 350-frame gameplay test uses 353 submissions and 711 dispatches;
+the default renderer-state schedule also asserts one submission per frame.
+[Catch-up report](results/catchup-report.json).
+
 An isolated build with a 16-command flush threshold forces overflow fallback;
 36 frames, every tick diagnostic, and all final frame bytes match original C.
 [Fallback report](results/queue-fallback.json). This test builds in a temporary
@@ -78,25 +86,37 @@ Reproduce the uncapped benchmark with a render after every game tick:
   --output build/profile
 ```
 
-The latest 350-frame gameplay run took **3.565 seconds: 98.17 FPS** at
-320×200. The same binary/shader with `--serial-render` took **6.508 seconds:
-53.78 FPS**. Measured rendering averaged **8.53 ms/frame** with cooperative
-opaque drawing versus **16.75 ms/frame** serially. Game ticks averaged
-**0.525 ms**. Both runs used identical inputs and 711 dispatches. Compilation,
-asset loading and initialization are excluded from the timed loop; total
-`gpu_ms` includes initialization, while render/tick counters do not.
-[Cooperative benchmark](results/render-benchmark.json),
-[serial benchmark](results/render-benchmark-serial.json).
+Three controlled 350-frame runs per variant give these medians at 320×200:
 
-The table isolates the **same initialized scene**, 12 measured samples per
-phase. The first build measured 7.69 FPS over 35 initial scripted frames; it is
+| Host/shader variant | Wall FPS | GPU work per frame | Submissions | Dispatches |
+| --- | ---: | ---: | ---: | ---: |
+| Separate submissions | 96.93 | 8.989 ms | 711 | 711 |
+| One submission per frame | 103.68 | 8.968 ms | 353 | 711 |
+| Batched, queue helpers allowed to inline | 103.74 | 8.970 ms | 353 | 711 |
+
+Batching improves throughput about **7%**, primarily by reducing CPU submission
+and waiting overhead. The inline change is within timing variation and is not
+shipped. All variants produce identical final frames and complete tick traces.
+The harness uses the same host/image, warms both shaders, and alternates trial
+order. [Full A/B report](results/overhead-benchmark.json).
+
+A representative batched run is saved as [raw benchmark](results/render-benchmark.json).
+Its combined input/tick/render GPU time is reported as one total; individual
+phase fields are `null`. The earlier 98.17 FPS cooperative-renderer run is
+retained [before batching](results/render-benchmark-before-batching.json), and
+the earlier 53.78 FPS serial-world run is retained as a
+[historical comparison](results/render-benchmark-serial.json). Initialization
+and compilation are excluded from all timed gameplay loops.
+
+Fixed-scene profiling below uses the **same initialized scene**, 12 measured
+samples per phase. The first build measured 7.69 FPS over 35 initial scripted frames; it is
 not the same gameplay sample count as the current benchmark.
 
 | GPU phase | First build | Before parallel drawing | Current build |
 | --- | ---: | ---: | ---: |
-| Palette expansion | 82.87 ms | 0.321 ms | 0.323 ms |
-| World rendering | 41.16 ms | 17.53 ms | 9.63 ms |
-| Full frame | 125.27 ms | 18.27 ms | 10.33 ms |
+| Palette expansion | 82.87 ms | 0.321 ms | 0.321 ms |
+| World rendering | 41.16 ms | 17.53 ms | 9.53 ms |
+| Full frame | 125.27 ms | 18.27 ms | 10.23 ms |
 
 Raw [baseline profile](results/profile-baseline.json),
 [before parallel drawing](results/profile-before-parallel.json), and
@@ -110,10 +130,10 @@ Fixed-point sampling, column overwrite order, and resulting pixels are
 preserved. Queue overflow and impending texture-cache reclamation use a serial
 flush. No extra render dispatch or whole-threadgroup barrier is required.
 
-The native window remains paced toward Doom's **35 Hz game clock**. Its FPS
-is not the 98 FPS uncapped engine throughput; the benefit is more timing
-headroom. The optimized foreground window was verified near 34–35 FPS, including
-turning, firing (ammo 50 → 49), and the original menu overlay.
+The native window remains paced toward Doom's **35 Hz game clock**.
+The batched host was verified at about 35 FPS in the foreground, including
+turning, firing (ammo 50 → 49), and the original menu overlay. The 104 FPS
+uncapped benchmark describes engine throughput and timing headroom.
 macOS can throttle inactive windows. First compilation of a changed engine
 still takes tens of seconds.
 

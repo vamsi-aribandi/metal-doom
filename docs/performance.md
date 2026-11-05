@@ -29,7 +29,7 @@ build/metal-doom --wad /path/to/doom1.wad --headless --scripted \
 ```
 
 That run records `summary.json`, a diagnostics trace, and the final framebuffer. Report
-wall FPS together with render and tick GPU time, sample/scene configuration, device,
+wall FPS together with GPU time, sample/scene configuration, device,
 and source revision. Verify CPU/GPU equality before comparing optimized implementations.
 
 ## What was fixed
@@ -63,3 +63,31 @@ The flag is diagnostic and requires headless/profile mode. Run variants
 sequentially on an otherwise idle GPU; do not compare a frame-hash run with a
 throughput run. The renderer keeps one dispatch per frame and uses only the
 32-lane game SIMD group; it does not occupy every GPU core.
+
+## Submission overhead
+
+The app submits input, ticks, and rendering in one command buffer, then waits
+once. It retains separate ordered compute encoders with immutable per-operation
+arguments; dispatch count and the engine API are unchanged. `--no-batch` restores
+one submission/wait per operation for headless comparisons.
+
+`summary.json` records `submissions` separately from `dispatches`.
+`loop_gpu_ms` sums GPU command-buffer time in the measured gameplay loop,
+excluding initialization. Batched runs also record `batched_frame_gpu_ms`,
+including input, ticking and rendering. Their individual `tick_gpu_ms` and
+`render_gpu_ms` are `null`, because command-buffer timestamps cannot separate
+those stages. The isolated profiler continues to report individual phases;
+the window displays combined GPU frame time.
+
+To repeat the controlled experiment:
+
+```sh
+python3 tests/benchmark_overhead.py --wad /path/to/doom1.wad --repeats 3
+```
+
+The harness uses one host binary and memory image, warms both pipelines, then
+alternates separate submissions, batched submissions, and a test-only shader
+that lets the two queue helpers inline. All final frames and tick traces must
+match. The tested batching gain was about 7%; allowing the helpers to inline
+made no measurable difference. The production translator remains unchanged.
+[Raw experiment](results/overhead-benchmark.json).

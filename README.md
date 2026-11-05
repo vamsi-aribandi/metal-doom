@@ -6,11 +6,10 @@ execute on the GPU. The CPU loads assets, collects keyboard input, and presents
 completed frames. Starts in E1M1, skill 3, at 320×200; sound can wait.
 
 On the tested M4 Mac mini, the 350-frame gameplay benchmark runs at **about
-98 FPS**, versus 54 FPS with serial world drawing in the same build and
-7.7 FPS in the first correctness build. The window is paced to
-Doom's 35 Hz game clock; foreground testing measured roughly 32–35 FPS. All 351
-captured frames match the independent CPU reference. See
-[measurements and tests](docs/validation.md).
+104 FPS**. Three-run A/B medians were 96.9 FPS with separate submissions and
+103.7 FPS with one submission per frame. The window follows Doom's 35 Hz game
+clock. All 351 gameplay frames plus 421 renderer-state frames match the
+independent CPU reference. See [measurements and tests](docs/validation.md).
 
 ## Build and run
 
