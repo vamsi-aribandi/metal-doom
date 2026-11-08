@@ -65,23 +65,31 @@ uint doom_group_first(uint value, uint lane, threadgroup uint *scratch) {
                             '  threadgroup uint scratch;\n  const uint op = operation[0], lanes = groupSize.x;')
     dispatch = replace_once(dispatch, 'doom_initialize(instance, operation[1], operation[2], lane, lanes)',
                             'doom_initialize(instance, operation[1], operation[2], lane, lanes, &scratch)')
-    boundary = persistent.index('\nkernel void doom_persistent(')
-    publish, kernel = persistent[:boundary], persistent[boundary:]
+    job_boundary = persistent.index('\ninline void doom_persistent_job(')
+    kernel_boundary = persistent.index('\n#ifndef DOOM_EMBEDDED')
+    publish = persistent[:job_boundary]
+    job, kernel = persistent[job_boundary:kernel_boundary], persistent[kernel_boundary:]
     publish = replace_once(publish, 'uint renders, uint keys, uint lane, uint lanes) {',
                            'uint renders, uint keys, uint lane, uint lanes, threadgroup uint *scratch) {')
     publish = group_barriers(broadcast(publish, 'scratch'))
+    job = replace_once(job, 'const device DoomReplayOperation *operations, uint lane, uint lanes) {',
+                       'const device DoomReplayOperation *operations, uint lane, uint lanes, '
+                       'threadgroup uint *scratch) {')
     kernel = replace_once(kernel, 'uint lane [[thread_index_in_simdgroup]], uint lanes [[threads_per_simdgroup]]) {',
                           'uint lane [[thread_index_in_threadgroup]], uint3 groupSize [[threads_per_threadgroup]]) {\n'
                           '  const uint lanes = groupSize.x;\n  threadgroup uint scratch;')
-    kernel = replace_once(kernel, 'doom_initialize(instance, offset, config.wadBytes, lane, lanes)',
-                          'doom_initialize(instance, offset, config.wadBytes, lane, lanes, &scratch)')
+    kernel = replace_once(kernel,
+                          'doom_persistent_job(memory, instance, wad, host, out, config, operations, lane, lanes);',
+                          'doom_persistent_job(memory, instance, wad, host, out, config, operations, lane, lanes, &scratch);')
+    job = replace_once(job, 'doom_initialize(instance, offset, config.wadBytes, lane, lanes)',
+                       'doom_initialize(instance, offset, config.wadBytes, lane, lanes, scratch)')
     # Both initial and later publications participate collectively.
     call = 'result, renders, previousKeys, lane, lanes);'
-    if kernel.count(call) != 2:
+    if job.count(call) != 2:
         raise AssertionError('Unexpected publication call count')
-    kernel = kernel.replace(call, 'result, renders, previousKeys, lane, lanes, &scratch);')
-    kernel = group_barriers(broadcast(kernel, '&scratch'))
-    variant = engine[:-len((ROOT / 'engine/entrypoints.metal').read_text())] + helper + api + dispatch + protocol + publish + kernel
+    job = job.replace(call, 'result, renders, previousKeys, lane, lanes, scratch);')
+    job = group_barriers(broadcast(job, 'scratch'))
+    variant = engine[:-len((ROOT / 'engine/entrypoints.metal').read_text())] + helper + api + dispatch + protocol + publish + job + kernel
     if 'simd_broadcast_first' in variant or 'simdgroup_barrier' in variant:
         raise AssertionError('Unconverted cross-SIMD synchronization')
     group = output / 'group.metal'
