@@ -128,3 +128,16 @@ kernel from that waiting state. Reports and subprocess logs are saved beneath
 These tests require the experimental live-memory mechanism described in
 [persistent execution](../docs/persistent.md). They test actual Doom in a single
 running dispatch, without adding GPU visibility probes or extra submissions.
+
+## Drawing parallelism experiment
+
+```sh
+python3 tests/benchmark_parallelism.py --wad /absolute/path/to/doom1.wad --repeats 3
+```
+
+This optional benchmark keeps generated variants in `build/parallelism/`; it does
+not replace production shaders, change the app's thread count, or run as part of
+the standard suite. `--smoke` checks a short replay for each variant. The full
+run tests 32/64/128/256 threads, including a 32-thread synchronization control,
+against original C before timing. It also checks live input and shutdown for the
+baseline and measured winner. See [method and results](../docs/performance.md#drawing-thread-count).

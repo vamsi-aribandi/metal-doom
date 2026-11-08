@@ -1,0 +1,622 @@
+{
+  "device": "Apple M4",
+  "repeats": 3,
+  "ticks_per_timed_run": 350,
+  "validation": [
+    {
+      "variant": "simd32",
+      "ticks_per_frame": 1,
+      "frames": 421,
+      "dispatches": 1,
+      "live_frames": 421
+    },
+    {
+      "variant": "group32",
+      "ticks_per_frame": 1,
+      "frames": 421,
+      "dispatches": 1,
+      "live_frames": 421
+    },
+    {
+      "variant": "group64",
+      "ticks_per_frame": 1,
+      "frames": 421,
+      "dispatches": 1,
+      "live_frames": 421
+    },
+    {
+      "variant": "group128",
+      "ticks_per_frame": 1,
+      "frames": 421,
+      "dispatches": 1,
+      "live_frames": 421
+    },
+    {
+      "variant": "group256",
+      "ticks_per_frame": 1,
+      "frames": 421,
+      "dispatches": 1,
+      "live_frames": 421
+    },
+    {
+      "variant": "simd32",
+      "ticks_per_frame": 8,
+      "frames": 54,
+      "dispatches": 1,
+      "live_frames": 54
+    },
+    {
+      "variant": "group32",
+      "ticks_per_frame": 8,
+      "frames": 54,
+      "dispatches": 1,
+      "live_frames": 54
+    },
+    {
+      "variant": "group64",
+      "ticks_per_frame": 8,
+      "frames": 54,
+      "dispatches": 1,
+      "live_frames": 54
+    },
+    {
+      "variant": "group128",
+      "ticks_per_frame": 8,
+      "frames": 54,
+      "dispatches": 1,
+      "live_frames": 54
+    },
+    {
+      "variant": "group256",
+      "ticks_per_frame": 8,
+      "frames": 54,
+      "dispatches": 1,
+      "live_frames": 54
+    }
+  ],
+  "identical_timed_outputs": true,
+  "scope": "Test-only group barriers/broadcasts. Production single-SIMD API unchanged.",
+  "scripted_cpu_frames_compared_per_variant": 351,
+  "wad_sha256": "1d7d43be501e67d927e415e0b8f3e29c3bf33075e859721816f652a526cac771",
+  "host_sha256": "afdc63fbc260ed33116db616707dacafb25cad9fddafd6b865b1c581d66c3a8c",
+  "variants": {
+    "simd32": {
+      "threads": 32,
+      "wall_fps_median": 106.20981607937772,
+      "wall_fps_samples": [
+        106.46705614597242,
+        106.20981607937772,
+        106.17206932761536
+      ],
+      "mean_gpu_ms_median": {
+        "palette": 0.3233680035918951,
+        "world": 9.740052046254277,
+        "full_render": 10.34551738606145
+      },
+      "pipeline_max_threads": 1024,
+      "static_threadgroup_bytes": 0,
+      "shader_sha256": "651932e857f5c1b4b0f427a61f5b04b3b2d8b2c7d33f022a5342870ee01da613",
+      "samples": [
+        {
+          "wall_fps": 106.46705614597242,
+          "seconds": 3.287401875,
+          "dispatches": 1,
+          "completion_reason": 2,
+          "threads": 32,
+          "ticks": 350,
+          "frames": 351,
+          "submissions": 1,
+          "live_frames": 351,
+          "device": "Apple M4",
+          "static_threadgroup_bytes": 0,
+          "pipeline_max_threads": 1024
+        },
+        {
+          "wall_fps": 106.20981607937772,
+          "seconds": 3.295363959,
+          "dispatches": 1,
+          "completion_reason": 2,
+          "threads": 32,
+          "ticks": 350,
+          "frames": 351,
+          "submissions": 1,
+          "live_frames": 351,
+          "device": "Apple M4",
+          "static_threadgroup_bytes": 0,
+          "pipeline_max_threads": 1024
+        },
+        {
+          "wall_fps": 106.17206932761536,
+          "seconds": 3.296535541,
+          "dispatches": 1,
+          "completion_reason": 2,
+          "threads": 32,
+          "ticks": 350,
+          "frames": 351,
+          "submissions": 1,
+          "live_frames": 351,
+          "device": "Apple M4",
+          "static_threadgroup_bytes": 0,
+          "pipeline_max_threads": 1024
+        }
+      ],
+      "profiles": [
+        {
+          "mean_gpu_ms": {
+            "palette": 0.3242985888694723,
+            "world": 9.740052046254277,
+            "full_render": 10.352072888053954
+          },
+          "device": "Apple M4",
+          "pipeline_max_threads": 1024,
+          "static_threadgroup_bytes": 0,
+          "threads": 32
+        },
+        {
+          "mean_gpu_ms": {
+            "palette": 0.3190520607555906,
+            "world": 9.610062465071678,
+            "full_render": 10.334614586705962
+          },
+          "device": "Apple M4",
+          "pipeline_max_threads": 1024,
+          "static_threadgroup_bytes": 0,
+          "threads": 32
+        },
+        {
+          "mean_gpu_ms": {
+            "palette": 0.3233680035918951,
+            "world": 9.777805573927859,
+            "full_render": 10.34551738606145
+          },
+          "device": "Apple M4",
+          "pipeline_max_threads": 1024,
+          "static_threadgroup_bytes": 0,
+          "threads": 32
+        }
+      ]
+    },
+    "group32": {
+      "threads": 32,
+      "wall_fps_median": 106.23249613041988,
+      "wall_fps_samples": [
+        106.59428812984281,
+        106.23249613041988,
+        105.84370130122798
+      ],
+      "mean_gpu_ms_median": {
+        "palette": 0.3198680157462756,
+        "world": 9.618683989780644,
+        "full_render": 10.343725754258534
+      },
+      "pipeline_max_threads": 1024,
+      "static_threadgroup_bytes": 16,
+      "shader_sha256": "bc4ec2fd69b4dd5585a5df2ed2de0706800b1faeffa723e083eaffa3852b7da7",
+      "samples": [
+        {
+          "wall_fps": 106.59428812984281,
+          "seconds": 3.283478,
+          "dispatches": 1,
+          "completion_reason": 2,
+          "threads": 32,
+          "ticks": 350,
+          "frames": 351,
+          "submissions": 1,
+          "live_frames": 351,
+          "device": "Apple M4",
+          "static_threadgroup_bytes": 16,
+          "pipeline_max_threads": 1024
+        },
+        {
+          "wall_fps": 106.23249613041988,
+          "seconds": 3.294660417,
+          "dispatches": 1,
+          "completion_reason": 2,
+          "threads": 32,
+          "ticks": 350,
+          "frames": 351,
+          "submissions": 1,
+          "live_frames": 351,
+          "device": "Apple M4",
+          "static_threadgroup_bytes": 16,
+          "pipeline_max_threads": 1024
+        },
+        {
+          "wall_fps": 105.84370130122798,
+          "seconds": 3.306762667,
+          "dispatches": 1,
+          "completion_reason": 2,
+          "threads": 32,
+          "ticks": 350,
+          "frames": 351,
+          "submissions": 1,
+          "live_frames": 351,
+          "device": "Apple M4",
+          "static_threadgroup_bytes": 16,
+          "pipeline_max_threads": 1024
+        }
+      ],
+      "profiles": [
+        {
+          "mean_gpu_ms": {
+            "palette": 0.3192430982987086,
+            "world": 9.616628560858468,
+            "full_render": 10.328409766467908
+          },
+          "device": "Apple M4",
+          "pipeline_max_threads": 1024,
+          "static_threadgroup_bytes": 16,
+          "threads": 32
+        },
+        {
+          "mean_gpu_ms": {
+            "palette": 0.3198680157462756,
+            "world": 9.618683989780644,
+            "full_render": 10.446954790192345
+          },
+          "device": "Apple M4",
+          "pipeline_max_threads": 1024,
+          "static_threadgroup_bytes": 16,
+          "threads": 32
+        },
+        {
+          "mean_gpu_ms": {
+            "palette": 0.32172220138212043,
+            "world": 9.726194548420608,
+            "full_render": 10.343725754258534
+          },
+          "device": "Apple M4",
+          "pipeline_max_threads": 1024,
+          "static_threadgroup_bytes": 16,
+          "threads": 32
+        }
+      ]
+    },
+    "group64": {
+      "threads": 64,
+      "wall_fps_median": 110.38228432559133,
+      "wall_fps_samples": [
+        110.51635332188674,
+        110.38228432559133,
+        110.135907161905
+      ],
+      "mean_gpu_ms_median": {
+        "palette": 0.21422922145575285,
+        "world": 9.473569380740324,
+        "full_render": 10.037225709917644
+      },
+      "pipeline_max_threads": 1024,
+      "static_threadgroup_bytes": 16,
+      "shader_sha256": "bc4ec2fd69b4dd5585a5df2ed2de0706800b1faeffa723e083eaffa3852b7da7",
+      "samples": [
+        {
+          "wall_fps": 110.51635332188674,
+          "seconds": 3.166952125,
+          "dispatches": 1,
+          "completion_reason": 2,
+          "threads": 64,
+          "ticks": 350,
+          "frames": 351,
+          "submissions": 1,
+          "live_frames": 351,
+          "device": "Apple M4",
+          "static_threadgroup_bytes": 16,
+          "pipeline_max_threads": 1024
+        },
+        {
+          "wall_fps": 110.38228432559133,
+          "seconds": 3.170798667,
+          "dispatches": 1,
+          "completion_reason": 2,
+          "threads": 64,
+          "ticks": 350,
+          "frames": 351,
+          "submissions": 1,
+          "live_frames": 351,
+          "device": "Apple M4",
+          "static_threadgroup_bytes": 16,
+          "pipeline_max_threads": 1024
+        },
+        {
+          "wall_fps": 110.135907161905,
+          "seconds": 3.177891834,
+          "dispatches": 1,
+          "completion_reason": 2,
+          "threads": 64,
+          "ticks": 350,
+          "frames": 351,
+          "submissions": 1,
+          "live_frames": 351,
+          "device": "Apple M4",
+          "static_threadgroup_bytes": 16,
+          "pipeline_max_threads": 1024
+        }
+      ],
+      "profiles": [
+        {
+          "mean_gpu_ms": {
+            "palette": 0.2182187745347619,
+            "world": 9.442461732154092,
+            "full_render": 10.037225709917644
+          },
+          "device": "Apple M4",
+          "pipeline_max_threads": 1024,
+          "static_threadgroup_bytes": 16,
+          "threads": 64
+        },
+        {
+          "mean_gpu_ms": {
+            "palette": 0.21220479781428972,
+            "world": 9.473569380740324,
+            "full_render": 10.021819461447498
+          },
+          "device": "Apple M4",
+          "pipeline_max_threads": 1024,
+          "static_threadgroup_bytes": 16,
+          "threads": 64
+        },
+        {
+          "mean_gpu_ms": {
+            "palette": 0.21422922145575285,
+            "world": 9.543871507048607,
+            "full_render": 10.102746503738066
+          },
+          "device": "Apple M4",
+          "pipeline_max_threads": 1024,
+          "static_threadgroup_bytes": 16,
+          "threads": 64
+        }
+      ]
+    },
+    "group128": {
+      "threads": 128,
+      "wall_fps_median": 113.25341174891702,
+      "wall_fps_samples": [
+        113.25341174891702,
+        113.09470396895439,
+        113.60079117147673
+      ],
+      "mean_gpu_ms_median": {
+        "palette": 0.12249996264775594,
+        "world": 9.447826421819627,
+        "full_render": 9.999746495547393
+      },
+      "pipeline_max_threads": 1024,
+      "static_threadgroup_bytes": 16,
+      "shader_sha256": "bc4ec2fd69b4dd5585a5df2ed2de0706800b1faeffa723e083eaffa3852b7da7",
+      "samples": [
+        {
+          "wall_fps": 113.25341174891702,
+          "seconds": 3.090414625,
+          "dispatches": 1,
+          "completion_reason": 2,
+          "threads": 128,
+          "ticks": 350,
+          "frames": 351,
+          "submissions": 1,
+          "live_frames": 351,
+          "device": "Apple M4",
+          "static_threadgroup_bytes": 16,
+          "pipeline_max_threads": 1024
+        },
+        {
+          "wall_fps": 113.09470396895439,
+          "seconds": 3.094751458,
+          "dispatches": 1,
+          "completion_reason": 2,
+          "threads": 128,
+          "ticks": 350,
+          "frames": 351,
+          "submissions": 1,
+          "live_frames": 351,
+          "device": "Apple M4",
+          "static_threadgroup_bytes": 16,
+          "pipeline_max_threads": 1024
+        },
+        {
+          "wall_fps": 113.60079117147673,
+          "seconds": 3.080964458,
+          "dispatches": 1,
+          "completion_reason": 2,
+          "threads": 128,
+          "ticks": 350,
+          "frames": 351,
+          "submissions": 1,
+          "live_frames": 351,
+          "device": "Apple M4",
+          "static_threadgroup_bytes": 16,
+          "pipeline_max_threads": 1024
+        }
+      ],
+      "profiles": [
+        {
+          "mean_gpu_ms": {
+            "palette": 0.12249996264775594,
+            "world": 9.447826421819627,
+            "full_render": 9.999746495547393
+          },
+          "device": "Apple M4",
+          "pipeline_max_threads": 1024,
+          "static_threadgroup_bytes": 16,
+          "threads": 128
+        },
+        {
+          "mean_gpu_ms": {
+            "palette": 0.11413540535916884,
+            "world": 9.454472300906977,
+            "full_render": 9.945777826942503
+          },
+          "device": "Apple M4",
+          "pipeline_max_threads": 1024,
+          "static_threadgroup_bytes": 16,
+          "threads": 128
+        },
+        {
+          "mean_gpu_ms": {
+            "palette": 0.13030902482569218,
+            "world": 9.438590301821629,
+            "full_render": 10.009350604377687
+          },
+          "device": "Apple M4",
+          "pipeline_max_threads": 1024,
+          "static_threadgroup_bytes": 16,
+          "threads": 128
+        }
+      ]
+    },
+    "group256": {
+      "threads": 256,
+      "wall_fps_median": 114.87500588623632,
+      "wall_fps_samples": [
+        114.18551067430623,
+        114.87500588623632,
+        114.9771807811561
+      ],
+      "mean_gpu_ms_median": {
+        "palette": 0.06304165193190177,
+        "world": 9.309117992719015,
+        "full_render": 9.814315979989866
+      },
+      "pipeline_max_threads": 1024,
+      "static_threadgroup_bytes": 16,
+      "shader_sha256": "bc4ec2fd69b4dd5585a5df2ed2de0706800b1faeffa723e083eaffa3852b7da7",
+      "samples": [
+        {
+          "wall_fps": 114.18551067430623,
+          "seconds": 3.0651875,
+          "dispatches": 1,
+          "completion_reason": 2,
+          "threads": 256,
+          "ticks": 350,
+          "frames": 351,
+          "submissions": 1,
+          "live_frames": 351,
+          "device": "Apple M4",
+          "static_threadgroup_bytes": 16,
+          "pipeline_max_threads": 1024
+        },
+        {
+          "wall_fps": 114.87500588623632,
+          "seconds": 3.046789833,
+          "dispatches": 1,
+          "completion_reason": 2,
+          "threads": 256,
+          "ticks": 350,
+          "frames": 351,
+          "submissions": 1,
+          "live_frames": 351,
+          "device": "Apple M4",
+          "static_threadgroup_bytes": 16,
+          "pipeline_max_threads": 1024
+        },
+        {
+          "wall_fps": 114.9771807811561,
+          "seconds": 3.044082292,
+          "dispatches": 1,
+          "completion_reason": 2,
+          "threads": 256,
+          "ticks": 350,
+          "frames": 351,
+          "submissions": 1,
+          "live_frames": 351,
+          "device": "Apple M4",
+          "static_threadgroup_bytes": 16,
+          "pipeline_max_threads": 1024
+        }
+      ],
+      "profiles": [
+        {
+          "mean_gpu_ms": {
+            "palette": 0.06417363571623962,
+            "world": 9.263125054227809,
+            "full_render": 9.814315979989866
+          },
+          "device": "Apple M4",
+          "pipeline_max_threads": 1024,
+          "static_threadgroup_bytes": 16,
+          "threads": 256
+        },
+        {
+          "mean_gpu_ms": {
+            "palette": 0.06269446263710658,
+            "world": 9.309117992719015,
+            "full_render": 9.757475617031256
+          },
+          "device": "Apple M4",
+          "pipeline_max_threads": 1024,
+          "static_threadgroup_bytes": 16,
+          "threads": 256
+        },
+        {
+          "mean_gpu_ms": {
+            "palette": 0.06304165193190177,
+            "world": 9.403066088755926,
+            "full_render": 9.8862883169204
+          },
+          "device": "Apple M4",
+          "pipeline_max_threads": 1024,
+          "static_threadgroup_bytes": 16,
+          "threads": 256
+        }
+      ]
+    }
+  },
+  "live_checks": {
+    "simd32": {
+      "threads": 32,
+      "gpu": {
+        "passed": true,
+        "dispatches": 1,
+        "submissions": 1,
+        "frames": 175,
+        "ticks": 174,
+        "seconds": 5.01604,
+        "fps": 34.6887,
+        "max_ticks_per_frame": 1,
+        "observed_key_mask": 76,
+        "stop_ms": 0.139875,
+        "stop_while_unacknowledged": true,
+        "status": 4
+      },
+      "cpu_reference": {
+        "passed": true,
+        "frames_compared": 175,
+        "diagnostic_values_compared": 2800,
+        "ticks": 174,
+        "max_ticks_per_frame": 1,
+        "observed_key_mask": 76,
+        "final_frame_sha256": "db6e78553f391f81ecf1c6d05e8bb666343f0e9b384e41350ce36b3282fdc7c5"
+      }
+    },
+    "group256": {
+      "threads": 256,
+      "gpu": {
+        "passed": true,
+        "dispatches": 1,
+        "submissions": 1,
+        "frames": 175,
+        "ticks": 174,
+        "seconds": 5.01961,
+        "fps": 34.664,
+        "max_ticks_per_frame": 1,
+        "observed_key_mask": 76,
+        "stop_ms": 0.121833,
+        "stop_while_unacknowledged": true,
+        "status": 4
+      },
+      "cpu_reference": {
+        "passed": true,
+        "frames_compared": 175,
+        "diagnostic_values_compared": 2800,
+        "ticks": 174,
+        "max_ticks_per_frame": 1,
+        "observed_key_mask": 76,
+        "final_frame_sha256": "db6e78553f391f81ecf1c6d05e8bb666343f0e9b384e41350ce36b3282fdc7c5"
+      }
+    }
+  },
+  "passed": true,
+  "base_commit": "0ea419bd59a53c63de0a03c5b36921bed19003fd",
+  "engine_api_sha256": "4c5522d6d2f35e19aff1382ff9c3370d1ec68000f1d48c0c18a40cf91e4bc106",
+  "profile_scope": "12 repeated renders of the initialized scene per phase; separate from the timed gameplay route"
+}

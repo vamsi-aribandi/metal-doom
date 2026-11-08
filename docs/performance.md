@@ -110,3 +110,51 @@ compilation and initialization are excluded. This modest difference does not
 make Doom's serial gameplay and traversal parallel. The main change is one
 running command instead of per-frame GPU submissions.
 [Recorded results](results/persistent-benchmark.json).
+
+## Drawing thread count
+
+```sh
+python3 tests/benchmark_parallelism.py --wad /path/to/doom1.wad --repeats 3
+```
+
+The experiment generates test-only shaders with 32, 64, 128 and 256 cooperating
+threads. More than one SIMD group requires whole-threadgroup barriers and shared
+broadcasts; increasing the launch size alone would create multiple game owners
+and break synchronization. A transformed 32-thread control measures that extra
+synchronization separately. Production shaders and the single-SIMD engine API
+are unchanged.
+
+Three warmed 350-tick runs, rendering every tick, gave these medians on the M4:
+
+| Variant | Wall FPS | Change from production 32 |
+| --- | ---: | ---: |
+| 32 threads, original SIMD synchronization | 106.21 | — |
+| 32 threads, whole-threadgroup synchronization | 106.23 | +0.02% |
+| 64 threads | 110.38 | +3.93% |
+| 128 threads | 113.25 | +6.63% |
+| 256 threads | 114.88 | +8.16% |
+
+The initial-view profiler separately measures palette conversion at 0.323 ms
+with 32 threads and 0.063 ms with 256. World rendering changes from 9.740 ms to
+9.309 ms, and full rendering from 10.346 ms to 9.814 ms. These fixed-scene phase
+samples are not a decomposition of the gameplay-route FPS. They show strong
+scaling for palette conversion and much smaller improvement for the complete
+renderer; serial engine work and other rendering costs still limit throughput.
+
+All five variants match original C across 351 scripted frames, 421 renderer-state
+frames and 54 catch-up frames, including all sixteen diagnostics and every final
+scripted framebuffer byte. Timed runs omit per-frame SHA256 work and still compare
+every diagnostic row and final pixels. The normal 32-thread variant and the
+256-thread winner also pass five-second live input and CPU replay checks, held
+snapshot ownership, and shutdown while waiting for acknowledgement. Every replay
+and live run uses one dispatch including initialization.
+
+The standalone keeps its 32-thread default. The extra workers improve uncapped
+throughput, but 256 threads use eight SIMD groups instead of one for an 8% gain.
+A whole-threadgroup calling contract would require a different arrangement when
+combined with independent training and inference groups. These results support
+an optional larger game group in a future integration, rather than changing the
+engine contract for a modest standalone gain. The window remains paced at 35 Hz.
+The experiment validates normal gameplay paths; it does not establish that every
+corrupted-memory fault path can terminate safely across multiple SIMD groups.
+[Raw results](results/parallelism-benchmark.json).
