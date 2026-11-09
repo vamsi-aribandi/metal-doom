@@ -5,6 +5,7 @@ Wasm is an intermediate portable C representation, translated to native Metal.
 Only generated copies in build/ are patched. No gameplay source is rewritten.
 """
 from pathlib import Path
+from renderer_compat import patch as patch_renderer_cache
 import concurrent.futures
 import os
 import shutil
@@ -20,6 +21,7 @@ FILES = '''dummy am_map doomdef doomstat dstrings d_event d_items d_iwad d_loop 
 EXPORTS = 'engine_alloc engine_init engine_key engine_tick engine_render engine_profile_world engine_index_buffer engine_palette engine_framebuffer engine_diagnostics engine_log engine_log_size engine_draw_queue engine_render_begin engine_render_end engine_world_begin engine_world_end'.split()
 BUILD.mkdir(exist_ok=True)
 shutil.copytree(UPSTREAM, SRC, dirs_exist_ok=True)
+patch_renderer_cache(SRC)
 p = SRC / 'd_main.c'
 s = p.read_text()
 start = s.index('void D_DoomLoop (void)\n{')

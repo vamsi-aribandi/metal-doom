@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compile original Doom C for ARM64 CPU, independently of WASM/Metal lowering."""
 from pathlib import Path
+from renderer_compat import patch as patch_renderer_cache
 import os
 import re
 import shutil
@@ -15,6 +16,7 @@ LIB = ROOT / 'vendor/tinylibc'
 def main():
     BUILD.mkdir(exist_ok=True)
     shutil.copytree(UPSTREAM, SRC, dirs_exist_ok=True)
+    patch_renderer_cache(SRC)
     p = SRC / 'd_main.c'
     s = p.read_text()
     start = s.index('void D_DoomLoop (void)\n{')

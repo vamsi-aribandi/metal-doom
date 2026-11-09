@@ -139,3 +139,34 @@ progress of all workers and latency under real ML workloads. The standalone
 uses call-stack depth 32; a combined pipeline must establish its own viable
 resource settings. Long dispatches can also fail with an OS/driver timeout;
 a successful sustained test does not guarantee indefinite operation.
+
+## Deterministic cache boundaries
+
+`engine/renderer_compat.py` patches generated C copies for both the native C
+reference and the GPU build. Cached lumps reserve a zero-filled 128-byte tail;
+composite wall textures clear their allocated data and the same tail. The
+original vendored C stays unchanged.
+
+Vanilla Doom's column routine wraps texture indices to 128 even for shorter
+textures. At a short column's end, fixed-point rounding can sample beyond its
+data. Our longer E1M1 recording found a read into zone allocator metadata:
+identical game state and texture coordinates yielded different pixels on 32-bit
+WASM and 64-bit native C. Heap metadata is not game image data. Padding gives
+those trailing reads a defined zero value; clearing composite holes removes
+another source of allocator-dependent pixels. This is a compatibility change at
+undefined pixels, not a promise to match arbitrary historical heap contents.
+The general issue is also described by
+[Headless Doom's portability notes](https://github.com/jwhitham/HeadlessDoom/blob/master/BUGS.md).
+
+Regression (no assets bundled):
+
+```sh
+./build.sh
+./engine/build_reference.sh
+python3 tests/test_cache_boundaries.py --wad /path/to/doom1.wad
+```
+
+The fixture preloads the captured 2,056-frame tick/key/render schedule into one
+persistent dispatch. It checks serial and cooperative Metal rendering against
+native C, comparing all pixels by SHA256 and all sixteen diagnostics. It covers
+the later E1M1 views that the shorter 420-tick test did not reach.

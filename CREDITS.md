@@ -17,7 +17,7 @@ The generated Metal engine is a derivative of GPL Doom engine source.
 WABT wasm2c is an external build dependency (Apache-2.0 with LLVM exception);
 LLVM and LLD are external build tools. No proprietary game assets are included.
 
-The future metal-megakernel integration target has a separate MIT license.
+The earlier Metal scheduling component was MIT licensed. The combined Doom/ML program is GPL-2.0-or-later.
 A distributed combined program containing this Doom engine must satisfy the
 Doom GPL obligations, including providing corresponding source.
 
