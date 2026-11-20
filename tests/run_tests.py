@@ -105,6 +105,15 @@ def main():
         run([sys.executable, ROOT / 'tests/test_persistent.py', '--wad', args.wad,
              '--output', persistent_output])
         report['persistent'] = json.loads((persistent_output / 'report.json').read_text())
+
+        # This input schedule reaches the affected textures in shareware 1.9.
+        if wad_sha == golden.get('wad_sha256'):
+            cache_output = args.output / 'cache-boundaries'
+            run([sys.executable, ROOT / 'tests/test_cache_boundaries.py', '--wad', args.wad,
+                 '--output', cache_output])
+            report['cache_boundaries'] = json.loads((cache_output / 'report.json').read_text())
+        else:
+            report['cache_boundaries'] = {'skipped': 'Replay requires the Doom shareware 1.9 IWAD'}
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))

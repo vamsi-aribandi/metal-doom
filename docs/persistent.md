@@ -158,7 +158,8 @@ undefined pixels, not a promise to match arbitrary historical heap contents.
 The general issue is also described by
 [Headless Doom's portability notes](https://github.com/jwhitham/HeadlessDoom/blob/master/BUGS.md).
 
-Regression (no assets bundled):
+The standard suite runs this regression when given the Doom shareware 1.9 IWAD.
+To run just this replay:
 
 ```sh
 ./build.sh
