@@ -94,14 +94,80 @@ renderer profiler. No extra timing dispatches run during the persistent loop.
 
 ## Embedding with training and inference
 
-`build/doom-engine.metal` still has no kernel or host-mailbox dependency. A combined
-kernel can call its functions from an independent game SIMD group while other
-groups run training and inference. Only SIMD-group barriers occur inside the
-Doom API. The standalone persistent wrapper demonstrates the game loop and live
-ownership protocol, but does not include or validate the combined ML pipeline.
+`build/doom-engine.metal` has no kernel or host-mailbox dependency. To reuse the
+complete persistent game loop, concatenate these sources in order:
+
+1. `build/doom-engine.metal`
+2. `app/persistent_protocol.h`
+3. `#define DOOM_EMBEDDED 1`, then `app/persistent.metal`
+4. The outer kernel, which calls `doom_persistent_job` from its game SIMD group.
+
+The callable function takes ordinary arguments, without fixed buffer bindings:
+
+```metal
+doom_persistent_job(memory, instance, wad, host, out, config, operations,
+                    lane, lanes);
+```
+
+The argument types and allocation requirements are the same as the standalone
+`doom_persistent` kernel: a fresh 96 MiB initial memory image, a zeroed
+`DoomState`, immutable IWAD bytes, separate zeroed `DoomHostControl` and
+`DoomLiveOutput` buffers, constant `DoomPersistentConfig`, and replay operations
+(a valid dummy buffer in realtime mode). The outer kernel chooses its own buffer
+indices. All 32 lanes of exactly one complete SIMD group must call the function
+with lane indices 0–31 and `lanes == 32`. No other group may access that Doom
+instance concurrently. Other SIMD groups in the same threadgroup can run
+independently; the job and engine use only SIMD-group barriers.
+
+Defining `DOOM_EMBEDDED` omits the standalone kernel entry point. Without it, the
+existing standalone kernel forwards to the same job, preserving its buffer
+layout and behavior. The job returns after host stop, replay exhaustion, or an
+engine failure, publishing `out->done` as 1, 2, or 3 respectively. It neither
+stops nor joins the other workloads. The outer host must request their shutdown
+too before waiting for the combined command to complete.
+
+Keep consuming and acknowledging Doom snapshots through `host->ack`, update
+`host->timeMS` and `host->keys`, and write `host->stop` to stop the job. A held
+snapshot pauses only Doom; shutdown remains checked on that wait path. Preserve
+the system-coherent qualifiers and fences when binding the live mailboxes.
+The copied pixels are `0x00RRGGBB` (BGRA bytes with alpha ignored).
+
+This interface does not include or validate the combined ML pipeline.
 
 That integration must still check combined register/stack/resource limits,
 progress of all workers and latency under real ML workloads. The standalone
 uses call-stack depth 32; a combined pipeline must establish its own viable
 resource settings. Long dispatches can also fail with an OS/driver timeout;
 a successful sustained test does not guarantee indefinite operation.
+
+## Deterministic cache boundaries
+
+`engine/renderer_compat.py` patches generated C copies for both the native C
+reference and the GPU build. Cached lumps reserve a zero-filled 128-byte tail;
+composite wall textures clear their allocated data and the same tail. The
+original vendored C stays unchanged.
+
+Vanilla Doom's column routine wraps texture indices to 128 even for shorter
+textures. At a short column's end, fixed-point rounding can sample beyond its
+data. Our longer E1M1 recording found a read into zone allocator metadata:
+identical game state and texture coordinates yielded different pixels on 32-bit
+WASM and 64-bit native C. Heap metadata is not game image data. Padding gives
+those trailing reads a defined zero value; clearing composite holes removes
+another source of allocator-dependent pixels. This is a compatibility change at
+undefined pixels, not a promise to match arbitrary historical heap contents.
+The general issue is also described by
+[Headless Doom's portability notes](https://github.com/jwhitham/HeadlessDoom/blob/master/BUGS.md).
+
+The standard suite runs this regression when given the Doom shareware 1.9 IWAD.
+To run just this replay:
+
+```sh
+./build.sh
+./engine/build_reference.sh
+python3 tests/test_cache_boundaries.py --wad /path/to/doom1.wad
+```
+
+The fixture preloads the captured 2,056-frame tick/key/render schedule into one
+persistent dispatch. It checks serial and cooperative Metal rendering against
+native C, comparing all pixels by SHA256 and all sixteen diagnostics. It covers
+the later E1M1 views that the shorter 420-tick test did not reach.

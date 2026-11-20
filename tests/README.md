@@ -141,3 +141,8 @@ the standard suite. `--smoke` checks a short replay for each variant. The full
 run tests 32/64/128/256 threads, including a 32-thread synchronization control,
 against original C before timing. It also checks live input and shutdown for the
 baseline and measured winner. See [method and results](../docs/performance.md#drawing-thread-count).
+
+With the Doom shareware 1.9 IWAD, the standard GPU suite also runs the 2,056-frame
+cache-boundary replay against the native C reference with both Metal renderers.
+The capture uses the shareware maps and textures, so runs with other IWADs record
+the case as skipped. See [cache compatibility details](../docs/persistent.md#deterministic-cache-boundaries).

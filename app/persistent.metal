@@ -48,14 +48,14 @@ void doom_publish(device DoomState *s, volatile coherent(system) device DoomLive
   }
 }
 
-kernel void doom_persistent(
-    device u8 *memory [[buffer(0)]], device DoomState *instance [[buffer(1)]],
-    const device u8 *wad [[buffer(2)]],
-    const volatile coherent(system) device DoomHostControl *host [[buffer(3)]],
-    volatile coherent(system) device DoomLiveOutput *out [[buffer(4)]],
-    constant DoomPersistentConfig &config [[buffer(5)]],
-    const device DoomReplayOperation *operations [[buffer(6)]],
-    uint lane [[thread_index_in_simdgroup]], uint lanes [[threads_per_simdgroup]]) {
+// Call collectively from exactly one complete SIMD group. All synchronization
+// stays within that group, so other groups in an outer kernel can keep working.
+inline void doom_persistent_job(
+    device u8 *memory, device DoomState *instance, const device u8 *wad,
+    const volatile coherent(system) device DoomHostControl *host,
+    volatile coherent(system) device DoomLiveOutput *out,
+    constant DoomPersistentConfig &config,
+    const device DoomReplayOperation *operations, uint lane, uint lanes) {
   uint offset = 0;
   if (lane == 0) {
     doom_bind(instance, memory);
@@ -135,3 +135,16 @@ kernel void doom_persistent(
     doom_system_fence();
   }
 }
+
+#ifndef DOOM_EMBEDDED
+kernel void doom_persistent(
+    device u8 *memory [[buffer(0)]], device DoomState *instance [[buffer(1)]],
+    const device u8 *wad [[buffer(2)]],
+    const volatile coherent(system) device DoomHostControl *host [[buffer(3)]],
+    volatile coherent(system) device DoomLiveOutput *out [[buffer(4)]],
+    constant DoomPersistentConfig &config [[buffer(5)]],
+    const device DoomReplayOperation *operations [[buffer(6)]],
+    uint lane [[thread_index_in_simdgroup]], uint lanes [[threads_per_simdgroup]]) {
+  doom_persistent_job(memory, instance, wad, host, out, config, operations, lane, lanes);
+}
+#endif
